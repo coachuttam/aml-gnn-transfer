@@ -8,11 +8,11 @@ in functions on its `training` module, and put them back afterwards:
     the stock ones.
   * `evaluate_homo` / `evaluate_hetero`: skip the test loader, so the test
     period is not scored during training (AGENTS.md rule 2). The stock loop
-    scores test every epoch; its logged "Test F1" lines are placeholders here.
+    scores test every epoch; here its log lines say "not scored".
   * `get_model`: PNA is built with our full-training-graph degree table.
 
 Everything else (loss, optimiser, epochs, best-validation checkpoint) is stock.
-Note: with fewer labels an epoch has proportionally fewer training steps.
+With fewer labels an epoch has fewer steps; src/step_budget.py sets the epochs.
 """
 
 from __future__ import annotations
@@ -28,8 +28,23 @@ from src.degree_table import save_degree_table, training_degree_histogram
 from src.label_mask import fingerprint, keep_label_positions
 from src.model_builder import get_model_using_table
 from src.score_checkpoint import base_argv
+from src.step_budget import steps_per_epoch
 
 EDGE_TYPE = ("node", "to", "node")
+
+
+class NotScored(float):
+    """A NaN that prints as "not scored".
+
+    Multi-GNN logs `Test F1: {value:.4f}`. Returning this instead of a number
+    makes the log line read "Test F1: not scored" without editing its code.
+    """
+
+    def __format__(self, format_spec: str) -> str:
+        return "not scored"
+
+
+NOT_SCORED = NotScored("nan")
 
 
 @dataclass(frozen=True)
@@ -52,6 +67,7 @@ class TrainingSummary:
     labels_kept: int
     laundering_labels_kept: int
     kept_labels_fingerprint: str
+    steps_per_epoch: int
 
 
 def training_argv(request: TrainingRequest) -> List[str]:
@@ -81,11 +97,11 @@ def patched_training(
 def without_test_scoring(
     original: Callable[..., float], holder: Dict[str, Any]
 ) -> Callable[..., float]:
-    """Wrap an evaluate function so it returns 0.0 for the test loader, unrun."""
+    """Wrap an evaluate function so the test loader is skipped and reported unscored."""
 
     def evaluate(loader: Any, *rest: Any) -> float:
         if loader is holder.get("test_loader"):
-            return 0.0
+            return NOT_SCORED
         return original(loader, *rest)
 
     return evaluate
@@ -175,7 +191,7 @@ def build_replacements(
 
 
 def summarize_training_labels(
-    train_data: Any, uses_reverse: bool, kept: np.ndarray
+    train_data: Any, uses_reverse: bool, kept: np.ndarray, batch_size: int
 ) -> TrainingSummary:
     """Count training transactions, kept labels and kept laundering labels."""
     graph = train_data[EDGE_TYPE] if uses_reverse else train_data
@@ -183,7 +199,10 @@ def summarize_training_labels(
     laundering_kept = int(labels[kept].sum())
     if laundering_kept == 0:
         raise ValueError("The kept labels contain no laundering: nothing to learn from")
-    return TrainingSummary(len(labels), len(kept), laundering_kept, fingerprint(kept))
+    steps = steps_per_epoch(len(kept), batch_size)
+    return TrainingSummary(
+        len(labels), len(kept), laundering_kept, fingerprint(kept), steps
+    )
 
 
 def prepare_degree_table(
@@ -215,7 +234,7 @@ def train_model(
     uses_reverse = bool(args.reverse_mp)
     kept = keep_label_positions(len(train_inds), request.fraction, args.seed)
     table = prepare_degree_table(args, train_data, model_folder)
-    summary = summarize_training_labels(train_data, uses_reverse, kept)
+    summary = summarize_training_labels(train_data, uses_reverse, kept, args.batch_size)
     kept_inds = train_inds[torch.as_tensor(kept)]
     replacements = build_replacements(modules, table, kept, uses_reverse)
     with patched_training(modules, replacements):

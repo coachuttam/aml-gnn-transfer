@@ -26,6 +26,22 @@ Source: Altman et al. (2023), Table 3. The paper does not say how much LI-Small 
 3. **Compare** with the LightGBM pipeline from [aml-ibm-experiment](https://github.com/coachuttam/aml-ibm-experiment) on LI-Small.
 4. **Write up** the answer, with the chart and limits.
 
+### How runs are compared: equal training steps
+
+With 10% of the labels, an epoch has about a tenth of the gradient steps. Giving every fraction the same number of epochs would starve the small ones. So the training budget is counted in **steps**, not epochs:
+
+- The budget is the steps in N epochs at 100% of the labels. N is `STEP_BUDGET_EPOCHS` in `src/config.py` (5, IBM's fine-tuning setting), or `--step-budget-epochs` on the command line.
+- A smaller fraction runs proportionally more epochs, so every run gets about the same number of steps.
+
+| Share of labels | 100% | 50% | 25% | 10% |
+| --- | --- | --- | --- | --- |
+| Epochs (N = 5) | 5 | 10 | 20 | 50 |
+
+- Trained from scratch and pre-trained-then-fine-tuned runs at the same fraction get the same budget and the same kept labels. The only difference is the starting weights.
+- Multi-GNN runs whole epochs, so step totals match to within one batch per epoch. Each run record stores its actual step count.
+- The checkpoint is the epoch with the best validation F1. Test is not scored during training.
+- A limit to keep in mind: the same small budget may leave a model trained from scratch underfitted, so it can be a weak baseline.
+
 Every run is scored with minority F1 (to compare with IBM) and with PR-AUC, precision in the top 100 and recall at an alert budget (to compare with Project 2). Thresholds and epochs are chosen on validation; test is scored once.
 
 ## Results

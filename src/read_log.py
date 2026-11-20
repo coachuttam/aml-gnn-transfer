@@ -19,10 +19,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 START_MARKER = "Retrieving data"  # first line of every Multi-GNN run
-SCORE_PATTERN = re.compile(r"(Train|Validation|Test) F1: (\S+)")
+SCORE_PATTERN = re.compile(r"(Train|Validation|Test) F1: (not scored|\S+)")
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class EpochScores:
     epoch: int
     train_f1: float
     validation_f1: float
-    test_f1: float
+    test_f1: Optional[float]  # None when the wrapper skipped test scoring
 
 
 def last_run_text(log_text: str) -> str:
@@ -46,7 +46,7 @@ def parse_epoch_scores(log_text: str) -> List[EpochScores]:
     epochs: List[EpochScores] = []
     pending: dict = {}
     for name, value in SCORE_PATTERN.findall(last_run_text(log_text)):
-        pending[name] = float(value)
+        pending[name] = None if value == "not scored" else float(value)
         if name == "Test" and len(pending) == 3:
             epochs.append(
                 EpochScores(

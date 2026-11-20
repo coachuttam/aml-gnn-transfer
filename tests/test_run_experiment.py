@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,6 +13,7 @@ from src.run_experiment import (
     build_experiment_record,
     parse_arguments,
     plan_run,
+    resolve_step_budget,
     scoring_request,
     training_request,
 )
@@ -65,14 +67,14 @@ def test_a_smoke_plan_renames_the_run_and_the_model_it_starts_from() -> None:
 
 
 def test_finetune_training_words_ask_multi_gnn_to_load_and_save_models() -> None:
-    request = training_request(plan_run("gin", "finetune", 1.0, 0), epochs=5)
+    request = training_request(plan_run("gin", "finetune", 1.0, 0))
     words = training_argv(request)
     assert "--finetune" in words and "--save_model" in words
     assert words[words.index("--n_epochs") + 1] == "5"
 
 
 def test_training_from_scratch_never_asks_to_load_a_model() -> None:
-    words = training_argv(training_request(plan_run("gin", "scratch", 1.0, 0), 5))
+    words = training_argv(training_request(plan_run("gin", "scratch", 1.0, 0)))
     assert "--finetune" not in words
 
 
@@ -83,7 +85,9 @@ def test_scoring_a_finetuned_run_looks_for_the_finetuned_checkpoint() -> None:
 def test_the_test_loader_is_not_run_during_training() -> None:
     holder = {"test_loader": "TEST"}
     evaluate = without_test_scoring(lambda loader, *rest: 0.99, holder)
-    assert evaluate("TEST", None) == 0.0
+    skipped = evaluate("TEST", None)
+    assert math.isnan(skipped)
+    assert "Test F1: {:.4f}".format(skipped) == "Test F1: not scored"
     assert evaluate("VALIDATION", None) == 0.99
 
 
@@ -104,11 +108,14 @@ def test_swapped_in_functions_are_put_back_even_if_training_fails() -> None:
 
 
 def make_record(smoke: bool = False):
-    plan = plan_run("gin", "scratch", 1.0, 0)
+    return make_record_for(plan_run("gin", "scratch", 1.0, 0), smoke)
+
+
+def make_record_for(plan, smoke: bool = False):
     metrics = score_period(np.array([1, 0]), np.array([0.9, 0.1]), threshold=0.5)
-    summary = TrainingSummary(1000, 1000, 7, "abc123")
+    summary = TrainingSummary(1000, 1000, 7, "abc123", 3)
     return build_experiment_record(
-        plan, ScoringResult(metrics, 4), summary, 5, 60.0, "env.yml", smoke
+        plan, ScoringResult(metrics, 4), summary, 60.0, "env.yml", smoke
     )
 
 
@@ -129,11 +136,50 @@ def test_a_zero_shot_record_reports_zero_epochs_trained() -> None:
     plan = plan_run("gin", "zero_shot", 1.0, 0)
     metrics = score_period(np.array([1, 0]), np.array([0.9, 0.1]), threshold=0.5)
     record = build_experiment_record(
-        plan, ScoringResult(metrics, 4), None, 5, 60.0, "env.yml", False
+        plan, ScoringResult(metrics, 4), None, 60.0, "env.yml", False
     )
     assert record.epochs_trained == 0 and record.config["labels_kept"] is None
 
 
-def test_the_command_line_has_no_default_for_epochs() -> None:
-    with pytest.raises(SystemExit):
-        parse_arguments("--model gin --mode source --environment env.yml".split())
+def test_smaller_label_fractions_train_proportionally_more_epochs() -> None:
+    epochs = [plan_run("gin", "scratch", f, 0).epochs for f in (1.0, 0.5, 0.25, 0.1)]
+    assert epochs == [5, 10, 20, 50]
+
+
+def test_scratch_and_finetune_get_the_same_budget_at_the_same_fraction() -> None:
+    scratch = plan_run("gin", "scratch", 0.25, 1)
+    finetune = plan_run("gin", "finetune", 0.25, 1)
+    assert scratch.epochs == finetune.epochs == 20
+
+
+def test_the_default_budget_is_five_epochs_at_all_the_labels() -> None:
+    assert plan_run("pna", "finetune", 1.0, 0).epochs == 5
+
+
+def test_a_zero_shot_run_has_no_epochs() -> None:
+    assert plan_run("gin", "zero_shot", 1.0, 0).epochs == 0
+
+
+def test_the_record_stores_the_budget_epochs_and_total_gradient_steps() -> None:
+    plan = plan_run("gin", "scratch", 0.25, 0)  # 20 epochs
+    config = make_record_for(plan).config
+    assert config["step_budget_epochs"] == 5
+    assert config["steps_per_epoch"] == 3
+    assert config["gradient_steps"] == 60
+
+
+def test_source_runs_must_choose_their_epochs_explicitly() -> None:
+    with pytest.raises(ValueError, match="explicit"):
+        resolve_step_budget("source", None)
+
+
+def test_other_modes_fall_back_to_the_configured_budget() -> None:
+    assert resolve_step_budget("finetune", None) == 5
+    assert resolve_step_budget("source", 12) == 12
+
+
+def test_the_command_line_accepts_a_step_budget() -> None:
+    arguments = parse_arguments(
+        "--model gin --mode source --environment env.yml --step-budget-epochs 7".split()
+    )
+    assert arguments.step_budget_epochs == 7

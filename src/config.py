@@ -71,6 +71,16 @@ RUN_MODES: Tuple[str, ...] = ("source", "zero_shot", "finetune", "scratch")
 # Multi-GNN never saves at epoch 0, so one epoch could leave no checkpoint.
 SMOKE_TEST_EPOCHS = 3
 
+# Training budget for the label-scarcity runs, counted in gradient steps. It is
+# the number of epochs at fraction 1.0; smaller fractions get proportionally more
+# epochs, so every run takes about the same number of steps. 5 is IBM's
+# fine-tuning setting (Table 3). Scratch and finetune share it at each fraction.
+STEP_BUDGET_EPOCHS = 5
+
+# Smoke test of the wrapper path: tiny budget, 10% of labels (so 10 short epochs).
+SMOKE_STEP_BUDGET_EPOCHS = 1
+SMOKE_LABEL_FRACTION = 0.10
+
 # Multi-GNN's own default. Not yet checked against IBM's paper settings (RQ1).
 REPRODUCTION_EPOCHS = 100
 

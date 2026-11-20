@@ -70,7 +70,8 @@ The HI-Small model is trained once per model type and seed, saved, and reused by
 4. **Same masks for both setups.** At a given fraction and seed, `scratch` and `finetune` see exactly the same labels. The only difference is the starting weights.
 5. **Choices on validation only.** Early stopping and the alert threshold use validation. Test is scored once per run.
 6. **One record per run.** Every run writes a JSON file with its config, both git commits (ours and Multi-GNN's), metrics, epochs used and runtime. Tables and charts are rebuilt from these records, never typed by hand.
-7. **Metrics match Project 2.** The same definitions (`metrics.py` follows Project 2's `train.py`), so GNN and LightGBM results sit in one table.
+7. **Equal steps, not equal epochs.** The training budget is the steps in N epochs at fraction 1.0; smaller fractions run proportionally more epochs (`src/step_budget.py`). Scratch and finetune share it at each fraction.
+8. **Metrics match Project 2.** The same definitions (`metrics.py` follows Project 2's `train.py`), so GNN and LightGBM results sit in one table.
 
 ## Where label masking hooks in (to confirm in week 1)
 

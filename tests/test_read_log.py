@@ -68,3 +68,18 @@ def test_a_later_epoch_beats_a_better_epoch_zero_as_multi_gnn_skips_it() -> None
 def test_a_log_with_no_finished_epoch_is_an_error() -> None:
     with pytest.raises(ValueError, match="No completed epochs"):
         multignn_best_epoch(parse_epoch_scores(PREFIX + "Retrieving data\n"))
+
+
+def test_a_wrapper_log_with_unscored_test_epochs_still_parses() -> None:
+    text = (
+        PREFIX
+        + "Retrieving data\n"
+        + PREFIX
+        + "Train F1: 0.1000\n"
+        + PREFIX
+        + "Validation F1: 0.2000\n"
+        + PREFIX
+        + "Test F1: not scored\n"
+    )
+    epochs = parse_epoch_scores(text)
+    assert epochs[0].validation_f1 == 0.2 and epochs[0].test_f1 is None
