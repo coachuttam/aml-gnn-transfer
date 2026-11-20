@@ -30,7 +30,9 @@ from src.config import (
     MULTI_GNN_DIR,
     SEEDS,
 )
+from src.degree_table import load_degree_table
 from src.metrics import RunMetrics, score_run
+from src.model_builder import build_model
 from src.prepare import run_folder_for
 from src.records import model_folder_for_run
 
@@ -101,12 +103,17 @@ def import_multignn_modules() -> SimpleNamespace:
     sys.dont_write_bytecode = True  # keep __pycache__ out of the submodule folder
     sys.path.insert(0, str(MULTI_GNN_DIR))
     import data_loading
+    import models
     import train_util
     import training
     import util
 
     return SimpleNamespace(
-        data_loading=data_loading, train_util=train_util, training=training, util=util
+        data_loading=data_loading,
+        models=models,
+        train_util=train_util,
+        training=training,
+        util=util,
     )
 
 
@@ -141,7 +148,9 @@ def load_trained_model(
     from torch_geometric.nn import to_hetero
 
     sample_batch = next(iter(data.train_loader))
-    model = modules.training.get_model(sample_batch, model_config(modules, args), args)
+    table = load_degree_table(path.parent)  # None for stock runs: PyG restores its own
+    config = model_config(modules, args)
+    model = build_model(modules, sample_batch, config, args, table)
     if args.reverse_mp:
         model = to_hetero(model, data.test_data.metadata(), aggr="mean")
     checkpoint = torch.load(path, map_location=device)
