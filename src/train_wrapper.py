@@ -6,9 +6,9 @@ in functions on its `training` module, and put them back afterwards:
   * `get_loaders`: the training loader only seeds from the kept labels (label
     masking). Every edge stays in the graph; validation and test loaders are
     the stock ones.
-  * `evaluate_homo` / `evaluate_hetero`: skip the test loader, so the test
-    period is not scored during training (AGENTS.md rule 2). The stock loop
-    scores test every epoch; here its log lines say "not scored".
+  * `evaluate_homo` / `evaluate_hetero`: skip the test loader (AGENTS.md rule 2)
+    and validate only on a fixed schedule (src/evaluation_schedule.py). Skipped
+    passes show "not scored" in the log.
   * `get_model`: PNA is built with our full-training-graph degree table.
   * `train_homo` / `train_hetero` (smoke tests only): if the stock loop saved no
     checkpoint, the last epoch's model is saved, so a short run can always be scored.
@@ -22,11 +22,16 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Tuple
 
 import numpy as np
 
 from src.degree_table import save_degree_table, training_degree_histogram
+from src.evaluation_schedule import (
+    remember_loaders,
+    scheduled_evaluation,
+    validation_epochs,
+)
 from src.graph_cache import load_graph_data
 from src.label_mask import fingerprint, keep_label_positions
 from src.model_builder import get_model_using_table
@@ -34,20 +39,6 @@ from src.score_checkpoint import base_argv, checkpoint_file
 from src.step_budget import steps_per_epoch
 
 EDGE_TYPE = ("node", "to", "node")
-
-
-class NotScored(float):
-    """A NaN that prints as "not scored".
-
-    Multi-GNN logs `Test F1: {value:.4f}`. Returning this instead of a number
-    makes the log line read "Test F1: not scored" without editing its code.
-    """
-
-    def __format__(self, format_spec: str) -> str:
-        return "not scored"
-
-
-NOT_SCORED = NotScored("nan")
 
 
 @dataclass(frozen=True)
@@ -61,6 +52,7 @@ class TrainingRequest:
     fraction: float
     finetune: bool
     smoke_test: bool = False
+    validations: Optional[int] = None  # validation passes in all; None = every epoch
 
 
 @dataclass(frozen=True)
@@ -97,32 +89,6 @@ def patched_training(
     finally:
         for name, function in originals.items():
             setattr(modules.training, name, function)
-
-
-def without_test_scoring(
-    original: Callable[..., float], holder: Dict[str, Any]
-) -> Callable[..., float]:
-    """Wrap an evaluate function so the test loader is skipped and reported unscored."""
-
-    def evaluate(loader: Any, *rest: Any) -> float:
-        if loader is holder.get("test_loader"):
-            return NOT_SCORED
-        return original(loader, *rest)
-
-    return evaluate
-
-
-def remember_test_loader(
-    original_get_loaders: Callable[..., Any], holder: Dict[str, Any]
-) -> Callable[..., Any]:
-    """Wrap get_loaders so we know which loader is the test loader."""
-
-    def get_loaders(*arguments: Any) -> Any:
-        loaders = original_get_loaders(*arguments)
-        holder["test_loader"] = loaders[2]
-        return loaders
-
-    return get_loaders
 
 
 def masked_train_loader(
@@ -182,15 +148,18 @@ def build_replacements(
     degree_table: Optional[np.ndarray],
     kept: np.ndarray,
     uses_reverse: bool,
+    schedule: FrozenSet[int],
 ) -> Dict[str, Callable[..., Any]]:
     """The functions to swap in for one training run."""
     holder: Dict[str, Any] = {}
     training = modules.training
     masked = with_masked_training_loader(training.get_loaders, kept, uses_reverse)
     return {
-        "get_loaders": remember_test_loader(masked, holder),
-        "evaluate_homo": without_test_scoring(training.evaluate_homo, holder),
-        "evaluate_hetero": without_test_scoring(training.evaluate_hetero, holder),
+        "get_loaders": remember_loaders(masked, holder),
+        "evaluate_homo": scheduled_evaluation(training.evaluate_homo, holder, schedule),
+        "evaluate_hetero": scheduled_evaluation(
+            training.evaluate_hetero, holder, schedule
+        ),
         "get_model": get_model_using_table(modules, degree_table),
     }
 
@@ -284,7 +253,8 @@ def train_model(
     kept = keep_label_positions(len(train_inds), request.fraction, args.seed)
     table = prepare_degree_table(args, train_data, model_folder)
     summary = summarize_training_labels(train_data, uses_reverse, kept, args.batch_size)
-    replacements = build_replacements(modules, table, kept, uses_reverse)
+    schedule = validation_epochs(request.epochs, request.validations)
+    replacements = build_replacements(modules, table, kept, uses_reverse, schedule)
     outcome: Dict[str, Any] = {}
     if request.smoke_test:
         path = checkpoint_file(model_folder, request.finetune)

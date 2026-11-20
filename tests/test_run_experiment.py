@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from types import SimpleNamespace
 
 import numpy as np
@@ -21,9 +20,7 @@ from src.score_checkpoint import ScoringResult
 from src.train_wrapper import (
     TrainingSummary,
     patched_training,
-    remember_test_loader,
     training_argv,
-    without_test_scoring,
 )
 
 
@@ -80,22 +77,6 @@ def test_training_from_scratch_never_asks_to_load_a_model() -> None:
 
 def test_scoring_a_finetuned_run_looks_for_the_finetuned_checkpoint() -> None:
     assert scoring_request(plan_run("gin", "finetune", 1.0, 0)).finetuned is True
-
-
-def test_the_test_loader_is_not_run_during_training() -> None:
-    holder = {"test_loader": "TEST"}
-    evaluate = without_test_scoring(lambda loader, *rest: 0.99, holder)
-    skipped = evaluate("TEST", None)
-    assert math.isnan(skipped)
-    assert "Test F1: {:.4f}".format(skipped) == "Test F1: not scored"
-    assert evaluate("VALIDATION", None) == 0.99
-
-
-def test_the_test_loader_is_noticed_when_the_loaders_are_built() -> None:
-    holder: dict = {}
-    get_loaders = remember_test_loader(lambda *arguments: ("tr", "val", "te"), holder)
-    get_loaders(1, 2, 3)
-    assert holder["test_loader"] == "te"
 
 
 def test_swapped_in_functions_are_put_back_even_if_training_fails() -> None:
@@ -217,3 +198,23 @@ def test_a_smoke_training_request_is_marked_as_smoke() -> None:
     plan = plan_run("gin", "scratch", 0.1, 0)
     assert training_request(plan, smoke_test=True).smoke_test is True
     assert training_request(plan).smoke_test is False
+
+
+def test_every_label_fraction_gets_the_same_number_of_validation_passes() -> None:
+    counts = {
+        fraction: plan_run("gin", "scratch", fraction, 0, 3).validations
+        for fraction in (0.10, 0.25, 1.0)
+    }
+    assert counts == {0.10: 3, 0.25: 3, 1.0: 3}
+
+
+def test_a_smoke_run_is_capped_at_two_epochs_even_at_ten_percent_labels() -> None:
+    plan = plan_run("gin", "scratch", 0.10, 0, 1, smoke=True)
+    assert plan.epochs == 2
+    assert plan_run("gin", "scratch", 0.10, 0, 1).epochs == 10
+
+
+def test_the_training_request_carries_the_validation_count() -> None:
+    plan = plan_run("gin", "scratch", 0.25, 0, 3)
+    assert training_request(plan).validations == 3
+    assert plan_run("gin", "zero_shot", 1.0, 0).epochs == 0

@@ -83,9 +83,11 @@ SMOKE_TEST_EPOCHS = 3
 # fine-tuning setting (Table 3). Scratch and finetune share it at each fraction.
 STEP_BUDGET_EPOCHS = 5
 
-# Smoke test of the wrapper path: tiny budget, 10% of labels (so 10 short epochs).
+# Smoke test of the wrapper path: 10% of labels, and never more than 2 epochs
+# (a 1-epoch budget at 10% would be 10 epochs, about 40 minutes on a T4).
 SMOKE_STEP_BUDGET_EPOCHS = 1
 SMOKE_LABEL_FRACTION = 0.10
+SMOKE_MAX_EPOCHS = 2
 
 # Multi-GNN's own default. Not yet checked against IBM's paper settings (RQ1).
 REPRODUCTION_EPOCHS = 100

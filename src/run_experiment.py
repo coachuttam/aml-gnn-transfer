@@ -29,6 +29,7 @@ from src.config import (
     PROJECT_ROOT,
     RUN_MODES,
     SEEDS,
+    SMOKE_MAX_EPOCHS,
     SOURCE_DATASET,
     STEP_BUDGET_EPOCHS,
     TARGET_DATASET,
@@ -70,6 +71,15 @@ class RunPlan:
     finetuned: bool
     step_budget_epochs: int  # epochs at fraction 1.0 that set the step budget
     epochs: int  # epochs this run trains for (0 for zero-shot)
+    validations: int  # validation passes in all: the same for every fraction
+
+
+def planned_epochs(mode: str, budget: int, fraction: float, smoke: bool) -> int:
+    """Epochs for a run: none for zero-shot, a short cap for smoke tests."""
+    if mode == "zero_shot":
+        return 0
+    epochs = epochs_for_budget(budget, fraction)
+    return min(epochs, SMOKE_MAX_EPOCHS) if smoke else epochs
 
 
 def plan_run(
@@ -87,6 +97,7 @@ def plan_run(
     source_id = make_run_id(model, "source", 1.0, seed)
     if smoke:
         run_id, source_id = smoke_run_id(run_id), smoke_run_id(source_id)
+    epochs = planned_epochs(mode, step_budget_epochs, fraction, smoke)
     return RunPlan(
         run_id=run_id,
         model=model,
@@ -99,9 +110,8 @@ def plan_run(
         trains=mode != "zero_shot",
         finetuned=mode == "finetune",
         step_budget_epochs=step_budget_epochs,
-        epochs=0
-        if mode == "zero_shot"
-        else epochs_for_budget(step_budget_epochs, fraction),
+        epochs=epochs,
+        validations=min(step_budget_epochs, epochs),
     )
 
 
@@ -123,6 +133,7 @@ def training_request(plan: RunPlan, smoke_test: bool = False) -> TrainingRequest
         plan.fraction,
         plan.finetuned,
         smoke_test,
+        plan.validations,
     )
 
 
@@ -144,6 +155,7 @@ def build_experiment_record(
         "dataset": plan.dataset_name,
         "step_budget_epochs": plan.step_budget_epochs,
         "epochs_requested": plan.epochs,
+        "validations": plan.validations,
         "steps_per_epoch": summary.steps_per_epoch if summary else None,
         "gradient_steps": gradient_steps(plan, summary),
         "environment": environment,
