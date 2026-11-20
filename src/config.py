@@ -98,3 +98,49 @@ MULTI_GNN_ADAPTATION_FLAGS: List[str] = ["--emlps", "--reverse_mp", "--ego", "--
 
 # IBM's published minority F1 on HI-Small (Altman et al. 2023, Table 3), for RQ1.
 IBM_REPORTED_MINORITY_F1: Dict[str, float] = {"gin": 64.79, "pna": 68.16}
+
+# The IBM dataset on Kaggle; the Colab notebook downloads it with the Kaggle API.
+KAGGLE_DATASET = "ealtman2019/ibm-transactions-for-anti-money-laundering-aml"
+
+# --- The Colab pilot (a smaller first pass; the full design is "v2") ---
+# One model, two seeds, three fractions, a 3-epoch step budget. Deferred to v2:
+# PNA, seed 2 and the 50% fraction.
+PILOT_MODEL = "gin"
+PILOT_SEEDS: Tuple[int, ...] = (0, 1)
+PILOT_FRACTIONS: Tuple[float, ...] = (0.10, 0.25, 1.00)
+PILOT_STEP_BUDGET_EPOCHS = 3
+
+# Both seeds fine-tune from the same source model (one HI-Small model, seed 0), so
+# the finetune spread leaves out pre-training variance. The README says so.
+PILOT_SOURCE_SEED = 0
+
+# Epochs for the one HI-Small source model of the pilot. PROPOSED, not yet approved:
+# the owner decides after reading the estimate (src/estimate_pilot.py).
+PILOT_SOURCE_EPOCHS = 10
+
+# Pilot records and models live apart from the full design's, so v2 runs can
+# reuse the same run ids without ever overwriting a pilot record.
+PILOT_FOLDER_NAME = "pilot"
+
+# --- Time and cost estimate inputs (src/estimate_pilot.py) ---
+# Measured on a Kaggle T4 (GIN + EU, batch size as Multi-GNN's default).
+MEASURED_TRAIN_MINUTES_PER_FULL_LI_EPOCH = 10.0  # 1 min per epoch at 10% of labels
+MEASURED_VALIDATION_MINUTES_LI = 2.8  # one validation pass over LI-Small
+# Assumptions, not measurements: replace them with Colab smoke timings.
+ASSUMED_TEST_PASS_MINUTES_LI = 2.8  # taken equal to a validation pass
+ASSUMED_GRAPH_LOAD_MINUTES = (
+    1.5  # loading a cached graph, once for train and once for score
+)
+HI_TO_LI_SIZE_RATIO = 5_078_345 / 6_924_049  # transactions in HI-Small / LI-Small
+# Colab compute units used per hour (measured by a third party in March 2026,
+# https://mccormickml.com/2024/04/23/colab-gpus-features-and-pricing/ ; they
+# change over time, so check the rate shown in your own Colab session).
+COLAB_UNITS_PER_HOUR: Dict[str, float] = {"T4": 1.19, "L4": 1.71, "A100": 5.40}
+# How much faster than a T4 each GPU might be on this job. Sampling runs on the
+# CPU and kept both GPUs idle, so 1.0 is the realistic case and the second is hopeful.
+GPU_SPEED_CASES: Dict[str, Tuple[float, float]] = {
+    "T4": (1.0, 1.0),
+    "L4": (1.0, 1.5),
+    "A100": (1.0, 2.5),
+}
+COLAB_UNITS_AVAILABLE = 50

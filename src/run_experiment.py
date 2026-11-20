@@ -89,12 +89,19 @@ def plan_run(
     seed: int,
     step_budget_epochs: int = STEP_BUDGET_EPOCHS,
     smoke: bool = False,
+    source_seed: Optional[int] = None,
 ) -> RunPlan:
-    """Work out datasets, ids and which checkpoint to use for a run."""
+    """Work out datasets, ids and which checkpoint to use for a run.
+
+    `source_seed` picks which source model a zero-shot or finetune run starts
+    from (default: the run's own seed). The pilot has one source model, seed 0.
+    """
     run_id = make_run_id(model, mode, fraction, seed)  # also checks mode and fraction
     if mode in ("source", "zero_shot") and fraction != 1.0:
         raise ValueError("Mode %s always uses all labels (fraction 1.0)" % mode)
-    source_id = make_run_id(model, "source", 1.0, seed)
+    source_id = make_run_id(
+        model, "source", 1.0, seed if source_seed is None else source_seed
+    )
     if smoke:
         run_id, source_id = smoke_run_id(run_id), smoke_run_id(source_id)
     epochs = planned_epochs(mode, step_budget_epochs, fraction, smoke)
@@ -252,6 +259,12 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "required for source runs)" % STEP_BUDGET_EPOCHS,
     )
     parser.add_argument("--environment", required=True, help="env.yml or pip-fallback")
+    parser.add_argument(
+        "--source-seed",
+        type=int,
+        default=None,
+        help="Seed of the source model to fine-tune from (default: --seed)",
+    )
     parser.add_argument("--smoke-test", action="store_true")
     return parser.parse_args(argv)
 
@@ -262,7 +275,7 @@ def main() -> None:
     budget = resolve_step_budget(arguments.mode, arguments.step_budget_epochs)
     plan = plan_run(
         arguments.model, arguments.mode, arguments.fraction,
-        arguments.seed, budget, arguments.smoke_test,
+        arguments.seed, budget, arguments.smoke_test, arguments.source_seed,
     )  # fmt: skip
     path = run_experiment(plan, arguments.environment, arguments.smoke_test)
     print("Wrote record: %s" % path)
