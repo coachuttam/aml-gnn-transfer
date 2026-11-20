@@ -14,6 +14,9 @@ import numpy as np
 
 EDGE_TYPE = ("node", "to", "node")
 
+# Marks our wrapper functions and points back at Multi-GNN's original.
+STOCK_ATTRIBUTE = "multignn_original"
+
 
 def build_model(
     modules: SimpleNamespace,
@@ -21,10 +24,17 @@ def build_model(
     config: Any,
     args: Any,
     degree_table: Optional[np.ndarray],
+    stock_get_model: Optional[Callable[..., Any]] = None,
 ) -> Any:
-    """Multi-GNN's model, with PNA built from `degree_table` when one is given."""
+    """Multi-GNN's model, with PNA built from `degree_table` when one is given.
+
+    `stock_get_model` must be Multi-GNN's own function. It is looked up on the
+    module only when none is passed, and then unwrapped, so a patched module can
+    never make this call itself.
+    """
     if args.model != "pna" or degree_table is None:
-        return modules.training.get_model(sample_batch, config, args)
+        original = stock_get_model or stock_function(modules.training.get_model)
+        return original(sample_batch, config, args)
     return build_pna(modules, sample_batch, config, args, degree_table)
 
 
@@ -58,12 +68,23 @@ def build_pna(
     )
 
 
+def stock_function(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Multi-GNN's own function, even if `function` is one of our wrappers."""
+    return getattr(function, STOCK_ATTRIBUTE, function)
+
+
 def get_model_using_table(
     modules: SimpleNamespace, degree_table: Optional[np.ndarray]
 ) -> Callable[[Any, Any, Any], Any]:
-    """A drop-in for `training.get_model`, for the wrapper to swap in at run time."""
+    """A drop-in for `training.get_model`, for the wrapper to swap in at run time.
+
+    Multi-GNN's original is captured here, once, before any patching. Wrapping
+    an already wrapped function reuses the same original, so patching twice is safe.
+    """
+    stock = stock_function(modules.training.get_model)
 
     def get_model(sample_batch: Any, config: Any, args: Any) -> Any:
-        return build_model(modules, sample_batch, config, args, degree_table)
+        return build_model(modules, sample_batch, config, args, degree_table, stock)
 
+    setattr(get_model, STOCK_ATTRIBUTE, stock)
     return get_model

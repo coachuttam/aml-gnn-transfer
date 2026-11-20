@@ -92,3 +92,34 @@ def test_the_swap_in_get_model_passes_calls_through_for_other_models() -> None:
     calls: list = []
     get_model = get_model_using_table(make_modules(calls), np.array([1]))
     assert get_model(None, None, SimpleNamespace(model="gat")) == "multi-gnn model"
+
+
+def test_patching_get_model_twice_does_not_recurse() -> None:
+    from src.train_wrapper import patched_training
+
+    calls: list = []
+    modules = make_modules(calls)
+    table = np.array([1, 2])
+    for _ in range(2):  # the second round starts from an already patched module
+        with patched_training(
+            modules, {"get_model": get_model_using_table(modules, table)}
+        ):
+            outer = modules.training.get_model
+            with patched_training(
+                modules, {"get_model": get_model_using_table(modules, table)}
+            ):
+                model = modules.training.get_model(
+                    None, None, SimpleNamespace(model="gin")
+                )
+            assert modules.training.get_model is outer
+    assert model == "multi-gnn model"
+    assert calls == ["gin", "gin"]
+
+
+def test_build_model_on_a_patched_module_still_reaches_multi_gnns_function() -> None:
+    calls: list = []
+    modules = make_modules(calls)
+    modules.training.get_model = get_model_using_table(modules, np.array([1]))
+    args = SimpleNamespace(model="gin")
+    assert build_model(modules, None, None, args, np.array([1])) == "multi-gnn model"
+    assert calls == ["gin"]
