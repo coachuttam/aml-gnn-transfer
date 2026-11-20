@@ -1,0 +1,18 @@
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+.env
+
+# Data comes from Kaggle and is never committed.
+data/
+*.csv
+!results/*.csv
+
+# Trained GNN weights are large; publish them separately if needed.
+models/
+*.pt
+
+Claude outputs/
+*.patch

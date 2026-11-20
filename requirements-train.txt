@@ -1,0 +1,3 @@
+# Heavy: GPU only (Kaggle or Colab). Install Multi-GNN's own environment first:
+#   conda env create -f external/Multi-GNN/env.yml
+# Then add anything our wrapper needs on top of it here.

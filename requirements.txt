@@ -1,0 +1,7 @@
+# Light: runs on the laptop (metrics, results, charts, tests, LightGBM baseline).
+numpy
+pandas
+scikit-learn
+lightgbm
+matplotlib
+pytest
