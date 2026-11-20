@@ -40,9 +40,32 @@ With 10% of the labels, an epoch has about a tenth of the gradient steps. Giving
 - Trained from scratch and pre-trained-then-fine-tuned runs at the same fraction get the same budget and the same kept labels. The only difference is the starting weights.
 - Multi-GNN runs whole epochs, so step totals match to within one batch per epoch. Each run record stores its actual step count.
 - The checkpoint is the epoch with the best validation F1. Test is not scored during training.
+- Validation is run **the same number of times for every fraction** (as many passes as the budget has epochs, evenly spread, always ending on the last epoch), because each pass over LI-Small takes about three minutes. Epochs in between log "not scored" and cannot be picked as best. Multi-GNN never saves a checkpoint after epoch 0, so at 100% (where epoch 0 is itself a validation point) there is one fewer candidate epoch than at smaller fractions.
+- Building the graph (reading the CSV, adding ports) is done once per dataset and cached (`src/graph_cache.py`); training and scoring reuse it.
 - A limit to keep in mind: the same small budget may leave a model trained from scratch underfitted, so it can be a weak baseline.
 
 Every run is scored with minority F1 (to compare with IBM) and with PR-AUC, precision in the top 100 and recall at an alert budget (to compare with Project 2). Thresholds and epochs are chosen on validation; test is scored once.
+
+### The Colab pilot (a first, smaller pass)
+
+Compute is limited, so the first results come from a **pilot**, not the full design. Every number from it is labelled "pilot".
+
+| | Pilot | Deferred to v2 |
+| --- | --- | --- |
+| Model | GIN + EU | PNA + EU |
+| Source model | one HI-Small model, seed 0 | one per seed |
+| Label fractions | 10%, 25%, 100% | 50% |
+| Seeds | 0, 1 | 2 |
+| Step budget | 3 epochs at 100% | 5 (IBM's fine-tuning setting) |
+| Runs | 1 source + 12 (scratch and finetune) | 24 |
+
+Limits that come with it:
+- Both seeds fine-tune from the **same** source model, so the finetune spread leaves out pre-training variance.
+- Two seeds is a thin spread. A gap inside it is not a result.
+- A 3-epoch budget may leave scratch under-trained, which would flatter pre-training.
+- The source model's epochs (`PILOT_SOURCE_EPOCHS`) are the owner's call, made after reading `python -m src.estimate_pilot`.
+
+Pilot records are kept in `results/pilot/`, apart from `results/runs/`, so v2 runs can never overwrite them. Run it with `notebooks/colab_runner.ipynb` (`RUN_FULL = True` only after approval).
 
 ## Results
 
@@ -61,6 +84,8 @@ python -m pytest -q
 ```
 
 On Kaggle: open `notebooks/kaggle_runner.ipynb`, attach the [IBM AML dataset](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml), switch the GPU on, and run the cells.
+
+On Colab: open `notebooks/colab_runner.ipynb`, put your Kaggle token at `aml-gnn-transfer/kaggle.json` in Drive, switch the GPU on, and run the cells. It starts as a smoke test; the notebooks are written by `python -m tools.make_notebooks`.
 
 ## Related projects
 
