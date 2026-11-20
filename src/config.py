@@ -47,6 +47,10 @@ DATASETS: Dict[str, DatasetSpec] = {
     "LI-Small": DatasetSpec("LI-Small", "LI-Small_Trans.csv", "Small_LI"),
 }
 
+# Pre-train on the synthetic dataset, then adapt to the target (PRD section 1).
+SOURCE_DATASET = "HI-Small"
+TARGET_DATASET = "LI-Small"
+
 # Three seeds is the smallest number that gives a spread (PRD section 6).
 SEEDS: Tuple[int, ...] = (0, 1, 2)
 

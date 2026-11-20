@@ -72,14 +72,19 @@ class LoadedData:
     test_indices: Any
 
 
-def multignn_argv(request: ScoringRequest) -> List[str]:
-    """Command-line words that make Multi-GNN's own parser build the right arguments."""
-    folder = DATASETS[request.dataset_name].folder_name
-    words = ["--data", folder, "--model", request.model, "--seed", str(request.seed)]
+def base_argv(dataset_name: str, model: str, seed: int) -> List[str]:
+    """Command-line words that make Multi-GNN's parser build the right arguments."""
+    folder = DATASETS[dataset_name].folder_name
+    words = ["--data", folder, "--model", model, "--seed", str(seed)]
     # --unique_name is a true/false flag in Multi-GNN, and its checkpoint file
     # names are built from it, so it must be switched on to find them.
     words += ["--unique_name", "--testing"]
     return words + list(MULTI_GNN_ADAPTATION_FLAGS)
+
+
+def multignn_argv(request: ScoringRequest) -> List[str]:
+    """The same words, for scoring a request."""
+    return base_argv(request.dataset_name, request.model, request.seed)
 
 
 def checkpoint_file(model_folder: Path, finetuned: bool) -> Path:
