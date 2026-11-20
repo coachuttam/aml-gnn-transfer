@@ -31,6 +31,7 @@ from src.config import (
     SEEDS,
 )
 from src.degree_table import load_degree_table
+from src.graph_cache import load_graph_data
 from src.metrics import RunMetrics, score_run
 from src.model_builder import build_model
 from src.prepare import run_folder_for
@@ -126,7 +127,7 @@ def prepare_loaders(
     modules: SimpleNamespace, args: Any, data_config: Any
 ) -> LoadedData:
     """Build the data and loaders the same way Multi-GNN's train_gnn does."""
-    data = modules.data_loading.get_data(args, data_config)
+    data = load_graph_data(modules, args, data_config)
     train_data, validation_data, test_data = data[0], data[1], data[2]
     train_inds, validation_inds, test_inds = data[3], data[4], data[5]
     modules.train_util.add_arange_ids([train_data, validation_data, test_data])

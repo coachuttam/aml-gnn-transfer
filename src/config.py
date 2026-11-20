@@ -18,12 +18,18 @@ from typing import Dict, List, Tuple
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MULTI_GNN_DIR = PROJECT_ROOT / "external" / "Multi-GNN"
 RESULTS_DIR = PROJECT_ROOT / "results"
-RUN_RECORDS_DIR = RESULTS_DIR / "runs"
+# Run records can be redirected too (Colab writes them straight to Drive).
+RUN_RECORDS_DIR = Path(os.environ.get("AML_RUN_RECORDS_DIR", RESULTS_DIR / "runs"))
 
 # Data and model weights are large and never committed (AGENTS.md rule 8).
-# The environment variables let the Kaggle notebook point at /kaggle/working.
+# The environment variables let the notebooks point at /kaggle/working or Google Drive.
 DATA_ROOT = Path(os.environ.get("AML_DATA_ROOT", PROJECT_ROOT / "data"))
 MODEL_ROOT = Path(os.environ.get("AML_MODEL_ROOT", PROJECT_ROOT / "models"))
+
+# Building the graph (reading the CSV, adding ports) takes several minutes of CPU,
+# so it is done once per dataset and settings, then loaded from here by training
+# and scoring. On Colab this folder lives on Drive, so it survives a restart.
+GRAPH_CACHE_ROOT = Path(os.environ.get("AML_GRAPH_CACHE", DATA_ROOT / "graph_cache"))
 
 # Multi-GNN's main.py reads data_config.json and model_settings.json from the
 # folder it is started in, and writes logs/ there. Editing the copies inside the

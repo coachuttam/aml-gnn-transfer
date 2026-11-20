@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 import numpy as np
 
 from src.degree_table import save_degree_table, training_degree_histogram
+from src.graph_cache import load_graph_data
 from src.label_mask import fingerprint, keep_label_positions
 from src.model_builder import get_model_using_table
 from src.score_checkpoint import base_argv, checkpoint_file
@@ -265,7 +266,7 @@ def load_training_data(
     args = modules.util.create_parser().parse_args(training_argv(request))
     modules.util.logger_setup()
     modules.util.set_seed(args.seed)
-    return args, modules.data_loading.get_data(args, data_config)
+    return args, load_graph_data(modules, args, data_config)
 
 
 def train_model(
