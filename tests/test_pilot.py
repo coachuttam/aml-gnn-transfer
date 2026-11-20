@@ -112,3 +112,9 @@ def test_a_faster_gpu_takes_fewer_hours_but_may_use_more_units() -> None:
     assert table["A100 hopeful"]["hours"] < table["T4 realistic"]["hours"]
     assert table["A100 realistic"]["units"] > table["T4 realistic"]["units"]
     assert total_t4_hours(pilot_runs()) > 0
+
+
+def test_every_pilot_command_is_accepted_by_the_run_experiment_parser() -> None:
+    for run in pilot_runs():
+        arguments = parse_arguments(run.command_words() + ["--environment", "x"])
+        assert arguments.mode == run.mode and arguments.seed == run.seed

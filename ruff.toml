@@ -4,3 +4,7 @@ extend-exclude = ["external"]
 
 [lint]
 select = ["E", "F", "I"]
+
+# Notebook cells are long shell lines inside strings; keep them readable as written.
+[lint.per-file-ignores]
+"tools/*" = ["E501"]
