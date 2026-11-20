@@ -1,9 +1,10 @@
 """Check that torch, CUDA and the graph libraries work together before any real run.
 
 Prints the versions, then tries what Multi-GNN needs: a CUDA-capable torch, the
-PyG extension libraries, `datatable` (IBM's formatter) and a neighbour-sampling
-loader on a tiny graph. Exits with code 1 and a list of problems if anything is
-wrong, so a notebook can stop instead of running on a broken setup.
+PyG extension libraries (including pyg-lib, the fast sampler), `datatable`
+(IBM's formatter) and a neighbour-sampling loader on a tiny graph. Exits with
+code 1 and a list of problems if anything is wrong, so a notebook can stop
+instead of running on a broken setup.
 
 Run inside the environment you want to check:
     python -m src.check_environment
@@ -20,6 +21,7 @@ from typing import Callable, List, Optional
 # Imported by Multi-GNN, by IBM's formatter, or by PyG's neighbour sampler.
 REQUIRED_MODULES = [
     "torch_geometric",
+    "pyg_lib",
     "torch_scatter",
     "torch_sparse",
     "datatable",
@@ -104,6 +106,14 @@ def check_neighbour_sampling() -> CheckResult:
     return CheckResult("neighbour sampling", True, "sampled %d nodes" % batch.num_nodes)
 
 
+def check_fast_sampler() -> CheckResult:
+    """Does PyG use pyg-lib for neighbour sampling? Without it sampling is slower."""
+    from torch_geometric.typing import WITH_PYG_LIB
+
+    detail = "neighbour sampling uses pyg-lib" if WITH_PYG_LIB else "pyg-lib not in use"
+    return CheckResult("pyg-lib sampler", bool(WITH_PYG_LIB), detail)
+
+
 def run_safely(name: str, check: Callable[[], CheckResult]) -> CheckResult:
     """Run a check, turning any crash into a failed result."""
     try:
@@ -118,6 +128,7 @@ def run_checks() -> List[CheckResult]:
     results += [check_import(name) for name in REQUIRED_MODULES]
     if all(result.passed for result in results):
         results.append(run_safely("scatter on GPU", check_cuda_scatter))
+        results.append(run_safely("pyg-lib sampler", check_fast_sampler))
         results.append(run_safely("neighbour sampling", check_neighbour_sampling))
     return results
 

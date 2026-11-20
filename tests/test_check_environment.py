@@ -43,3 +43,9 @@ def test_a_crashing_check_becomes_a_failed_result_instead_of_an_exception() -> N
 def test_only_failed_checks_are_listed_as_problems() -> None:
     results = [CheckResult("a", True, ""), CheckResult("b", False, "broken")]
     assert [r.name for r in failed(results)] == ["b"]
+
+
+def test_pyg_lib_is_a_required_module_so_slow_sampling_stops_the_notebook() -> None:
+    from src.check_environment import REQUIRED_MODULES
+
+    assert "pyg_lib" in REQUIRED_MODULES
