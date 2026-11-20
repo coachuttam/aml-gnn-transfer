@@ -1,0 +1,6 @@
+# Python 3.9 on the owner's Mac; AGENTS.md asks for typing.List / Optional.
+target-version = "py39"
+extend-exclude = ["external"]
+
+[lint]
+select = ["E", "F", "I"]
