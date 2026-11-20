@@ -86,6 +86,16 @@ def checkpoint_file(model_folder: Path, finetuned: bool) -> Path:
     return model_folder / ("checkpoint_True%s.tar" % suffix)
 
 
+def require_checkpoint(path: Path) -> Path:
+    """Fail with an explanation if the checkpoint is missing."""
+    if not path.exists():
+        raise FileNotFoundError(
+            "No checkpoint at %s. Multi-GNN saves only when validation F1 improves "
+            "after the first epoch, so a very short run may leave none." % path
+        )
+    return path
+
+
 def import_multignn_modules() -> SimpleNamespace:
     """Import Multi-GNN's modules late: they need torch, which laptops may lack."""
     sys.dont_write_bytecode = True  # keep __pycache__ out of the submodule folder
@@ -223,7 +233,7 @@ def score_checkpoint(request: ScoringRequest) -> ScoringResult:
     data = prepare_loaders(modules, args, json.loads(config_path.read_text()))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model_folder = model_folder_for_run(request.checkpoint_run_id)
-    path = checkpoint_file(model_folder, request.finetuned)
+    path = require_checkpoint(checkpoint_file(model_folder, request.finetuned))
     model, best_epoch = load_trained_model(modules, args, data, path, device)
     arrays = collect_both_periods(data, model, device, bool(args.reverse_mp))
     return ScoringResult(score_run(*arrays), best_epoch)

@@ -50,6 +50,11 @@ def make_run_id(model: str, mode: str, fraction: float, seed: int) -> str:
     return "%s_%s_f%s_s%d" % (model, mode, float(fraction), seed)
 
 
+def smoke_run_id(run_id: str) -> str:
+    """Smoke-test runs get their own id, so they never collide with real runs."""
+    return run_id + "_smoke"
+
+
 def model_folder_for_run(run_id: str, model_root: Path = MODEL_ROOT) -> Path:
     """Each run saves its model in its own folder, named by run id."""
     return model_root / run_id

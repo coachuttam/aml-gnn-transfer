@@ -8,7 +8,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.score_checkpoint import ScoringRequest, checkpoint_file, multignn_argv
+import pytest
+
+from src.score_checkpoint import (
+    ScoringRequest,
+    checkpoint_file,
+    multignn_argv,
+    require_checkpoint,
+)
 
 
 def make_request() -> ScoringRequest:
@@ -45,3 +52,10 @@ def test_a_plain_checkpoint_has_multignns_default_name(tmp_path: Path) -> None:
 def test_a_finetuned_checkpoint_gets_the_finetuned_suffix(tmp_path: Path) -> None:
     expected = tmp_path / "checkpoint_True_finetuned.tar"
     assert checkpoint_file(tmp_path, finetuned=True) == expected
+
+
+def test_a_missing_checkpoint_gets_an_explanation_not_a_bare_file_error(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(FileNotFoundError, match="improves"):
+        require_checkpoint(tmp_path / "checkpoint_True.tar")

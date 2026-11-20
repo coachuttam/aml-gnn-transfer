@@ -63,8 +63,9 @@ ALERT_BUDGETS: Tuple[int, ...] = (10_000, 25_000, 50_000)
 # The four ways a run can use the data (ARCHITECTURE.md, "Run modes").
 RUN_MODES: Tuple[str, ...] = ("source", "zero_shot", "finetune", "scratch")
 
-# A one-epoch-class check that the whole pipeline runs, before any long job.
-SMOKE_TEST_EPOCHS = 2
+# Enough epochs to exercise train, save, score and record before any long job.
+# Multi-GNN never saves at epoch 0, so one epoch could leave no checkpoint.
+SMOKE_TEST_EPOCHS = 3
 
 # Multi-GNN's own default. Not yet checked against IBM's paper settings (RQ1).
 REPRODUCTION_EPOCHS = 100

@@ -14,6 +14,7 @@ from src.records import (
     model_folder_for_run,
     read_all_records,
     read_record,
+    smoke_run_id,
     write_record,
 )
 
@@ -107,3 +108,7 @@ def test_untracked_files_do_not_mark_a_commit_as_dirty(tmp_path: Path) -> None:
     )
     (tmp_path / "stray.pyc").write_text("junk")
     assert not git_commit(tmp_path).endswith("+dirty")
+
+
+def test_a_smoke_test_run_id_never_equals_the_real_run_id() -> None:
+    assert smoke_run_id("gin_source_f1.0_s0") == "gin_source_f1.0_s0_smoke"
