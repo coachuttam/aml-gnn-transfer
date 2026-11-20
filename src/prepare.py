@@ -28,11 +28,11 @@ import pandas as pd
 from src.config import (
     DATA_ROOT,
     DATASETS,
-    MODEL_ROOT,
     MULTI_GNN_DIR,
-    RUN_FOLDER_NAME,
+    RUN_FOLDERS_NAME,
     DatasetSpec,
 )
+from src.records import model_folder_for_run
 
 FORMATTED_FILE_NAME = "formatted_transactions.csv"
 LAUNDERING_COLUMN = "Is Laundering"
@@ -54,6 +54,11 @@ def raw_csv_path(spec: DatasetSpec, data_root: Path) -> Path:
 def formatted_csv_path(spec: DatasetSpec, data_root: Path) -> Path:
     """Where IBM's formatter writes (and Multi-GNN reads) the formatted file."""
     return data_root / spec.folder_name / FORMATTED_FILE_NAME
+
+
+def run_folder_for(run_id: str, data_root: Path) -> Path:
+    """The folder Multi-GNN is started from for this run (its own logs live here)."""
+    return data_root / RUN_FOLDERS_NAME / run_id
 
 
 def link_raw_file(spec: DatasetSpec, raw_dir: Path, data_root: Path) -> Path:
@@ -161,8 +166,10 @@ def main() -> None:
     """Format the datasets, then write the run folder."""
     arguments = parse_arguments()
     prepare_datasets(arguments.datasets, arguments.raw_dir, DATA_ROOT)
-    config = build_data_config(DATA_ROOT, MODEL_ROOT / "saved", MODEL_ROOT / "saved")
-    run_folder = make_run_folder(DATA_ROOT / RUN_FOLDER_NAME, config)
+    save_dir = model_folder_for_run(arguments.run_id)
+    load_dir = model_folder_for_run(arguments.load_from_run_id or arguments.run_id)
+    config = build_data_config(DATA_ROOT, save_dir, load_dir)
+    run_folder = make_run_folder(run_folder_for(arguments.run_id, DATA_ROOT), config)
     print("Start Multi-GNN from: %s" % run_folder)
 
 

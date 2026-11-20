@@ -13,6 +13,7 @@ from src.prepare import (
     link_raw_file,
     make_run_folder,
     raw_csv_path,
+    run_folder_for,
     summarize_formatted_file,
 )
 
@@ -71,3 +72,10 @@ def test_model_folders_exist_after_making_the_run_folder(tmp_path: Path) -> None
     make_run_folder(tmp_path / "run", config)
     assert (tmp_path / "save").is_dir()
     assert (tmp_path / "load").is_dir()
+
+
+def test_each_run_starts_multi_gnn_from_its_own_folder_named_by_run_id(
+    tmp_path: Path,
+) -> None:
+    folder = run_folder_for("gin_source_f1.0_s0", tmp_path)
+    assert folder == tmp_path / "multignn_runs" / "gin_source_f1.0_s0"

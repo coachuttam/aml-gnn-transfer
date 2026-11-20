@@ -26,9 +26,10 @@ DATA_ROOT = Path(os.environ.get("AML_DATA_ROOT", PROJECT_ROOT / "data"))
 MODEL_ROOT = Path(os.environ.get("AML_MODEL_ROOT", PROJECT_ROOT / "models"))
 
 # Multi-GNN's main.py reads data_config.json and model_settings.json from the
-# folder it is started in. Editing the copies inside the submodule would break
-# the "submodule diff is always empty" rule, so we start it from this folder.
-RUN_FOLDER_NAME = "multignn_run"
+# folder it is started in, and writes logs/ there. Editing the copies inside the
+# submodule would break the "submodule diff is always empty" rule, so every run
+# starts from its own folder: <data root>/<this name>/<run id>/.
+RUN_FOLDERS_NAME = "multignn_runs"
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,9 @@ PRECISION_AT_K = 100
 
 # Alert budgets for "recall at N alerts": same three as Project 2, so results compare.
 ALERT_BUDGETS: Tuple[int, ...] = (10_000, 25_000, 50_000)
+
+# The four ways a run can use the data (ARCHITECTURE.md, "Run modes").
+RUN_MODES: Tuple[str, ...] = ("source", "zero_shot", "finetune", "scratch")
 
 # A one-epoch-class check that the whole pipeline runs, before any long job.
 SMOKE_TEST_EPOCHS = 2
