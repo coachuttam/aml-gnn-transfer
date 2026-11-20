@@ -25,6 +25,7 @@ from src.config import (
     SEEDS,
 )
 from src.prepare import run_folder_for
+from src.read_log import EpochScores, multignn_best_epoch, parse_epoch_scores
 from src.records import RunRecord, git_commit, write_record
 from src.score_checkpoint import (
     ScoringRequest,
@@ -48,8 +49,23 @@ class RunContext:
     multignn_commit: str
 
 
+def logged_metrics(logged: EpochScores, scored_checkpoint_epoch: int) -> dict:
+    """What Multi-GNN's own log reported, for comparison with our scored numbers."""
+    return {
+        "minority_f1": logged.test_f1,
+        "validation_f1": logged.validation_f1,
+        "epoch": logged.epoch + 1,  # 1-based, like the checkpoint's own epoch field
+        "source": "Multi-GNN training log, four decimals, argmax threshold",
+        # If this is False the log and the checkpoint disagree: investigate first.
+        "same_epoch_as_checkpoint": logged.epoch + 1 == scored_checkpoint_epoch,
+    }
+
+
 def build_record(
-    request: ScoringRequest, result: ScoringResult, context: RunContext
+    request: ScoringRequest,
+    result: ScoringResult,
+    context: RunContext,
+    logged: EpochScores,
 ) -> RunRecord:
     """Combine the scoring result and the run facts into one record."""
     config = {
@@ -69,7 +85,10 @@ def build_record(
         config=config,
         ours_commit=context.ours_commit,
         multignn_commit=context.multignn_commit,
-        metrics={"scored": result.metrics.to_dict()},
+        metrics={
+            "scored": result.metrics.to_dict(),
+            "logged_by_multignn": logged_metrics(logged, result.best_epoch),
+        },
         epochs_trained=context.epochs_requested,  # the stock loop never stops early
         best_epoch=result.best_epoch,
         runtime_seconds=context.runtime_seconds,
@@ -106,7 +125,10 @@ def main() -> None:
     )  # fmt: skip
     # Multi-GNN reads ./model_settings.json, so score from the run folder.
     os.chdir(run_folder_for(request.run_id, DATA_ROOT))
-    path = write_record(build_record(request, score_checkpoint(request), context))
+    log_path = run_folder_for(request.run_id, DATA_ROOT) / "logs" / "logs.log"
+    logged = multignn_best_epoch(parse_epoch_scores(log_path.read_text()))
+    result = score_checkpoint(request)
+    path = write_record(build_record(request, result, context, logged))
     print("Wrote record: %s" % path)
 
 

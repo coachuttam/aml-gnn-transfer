@@ -1,0 +1,70 @@
+"""Tests for src/read_log.py, using log lines shaped like Multi-GNN's own."""
+
+from __future__ import annotations
+
+import pytest
+
+from src.read_log import multignn_best_epoch, parse_epoch_scores
+
+PREFIX = "2026-11-20 10:00:00,000 [INFO ] "
+
+
+def log_lines(rows) -> str:
+    """Rows of (train, validation, test) F1 turned into log text."""
+    text = PREFIX + "Retrieving data\n" + PREFIX + "Illicit ratio = 1 / 2\n"
+    for train, validation, test in rows:
+        text += PREFIX + "Train F1: %.4f\n" % train
+        text += PREFIX + "Validation F1: %.4f\n" % validation
+        text += PREFIX + "Test F1: %.4f\n" % test
+    return text
+
+
+def test_every_logged_epoch_is_read_in_order() -> None:
+    epochs = parse_epoch_scores(log_lines([(0.1, 0.2, 0.3), (0.4, 0.5, 0.6)]))
+    assert [(e.epoch, e.validation_f1, e.test_f1) for e in epochs] == [
+        (0, 0.2, 0.3),
+        (1, 0.5, 0.6),
+    ]
+
+
+def test_only_the_latest_run_in_an_appended_log_is_read() -> None:
+    older = log_lines([(0.9, 0.9, 0.9)])
+    newer = log_lines([(0.1, 0.2, 0.3)])
+    assert len(parse_epoch_scores(older + newer)) == 1
+
+
+def test_an_epoch_cut_off_before_its_test_line_is_ignored() -> None:
+    text = log_lines([(0.1, 0.2, 0.3)]) + PREFIX + "Train F1: 0.5000\n"
+    assert len(parse_epoch_scores(text)) == 1
+
+
+def test_the_best_epoch_is_the_last_one_that_beat_all_earlier_validation_scores() -> (
+    None
+):
+    epochs = parse_epoch_scores(
+        log_lines([(0, 0.2, 0.30), (0, 0.5, 0.40), (0, 0.4, 0.90), (0, 0.6, 0.50)])
+    )
+    best = multignn_best_epoch(epochs)
+    assert (best.epoch, best.test_f1) == (3, 0.5)
+
+
+def test_the_test_score_never_picks_the_epoch() -> None:
+    epochs = parse_epoch_scores(
+        log_lines([(0, 0.2, 0.1), (0, 0.5, 0.0), (0, 0.4, 0.99)])
+    )
+    assert multignn_best_epoch(epochs).epoch == 1
+
+
+def test_epoch_zero_is_reported_only_when_no_later_epoch_improves() -> None:
+    epochs = parse_epoch_scores(log_lines([(0, 0.9, 0.8), (0, 0.0, 0.7)]))
+    assert multignn_best_epoch(epochs).epoch == 0
+
+
+def test_a_later_epoch_beats_a_better_epoch_zero_as_multi_gnn_skips_it() -> None:
+    epochs = parse_epoch_scores(log_lines([(0, 0.9, 0.8), (0, 0.3, 0.7)]))
+    assert multignn_best_epoch(epochs).epoch == 1
+
+
+def test_a_log_with_no_finished_epoch_is_an_error() -> None:
+    with pytest.raises(ValueError, match="No completed epochs"):
+        multignn_best_epoch(parse_epoch_scores(PREFIX + "Retrieving data\n"))
