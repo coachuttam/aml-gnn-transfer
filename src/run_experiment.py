@@ -127,6 +127,8 @@ def build_experiment_record(
         "train_transactions": summary.train_transactions if summary else None,
         "labels_kept": summary.labels_kept if summary else None,
         "laundering_labels_kept": summary.laundering_labels_kept if summary else None,
+        "kept_labels_fingerprint": summary.kept_labels_fingerprint if summary else None,
+        "label_mask_seed": plan.seed,
     }
     return RunRecord(
         run_id=plan.run_id, model=plan.model, mode=plan.mode,

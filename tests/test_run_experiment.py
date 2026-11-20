@@ -106,7 +106,7 @@ def test_swapped_in_functions_are_put_back_even_if_training_fails() -> None:
 def make_record(smoke: bool = False):
     plan = plan_run("gin", "scratch", 1.0, 0)
     metrics = score_period(np.array([1, 0]), np.array([0.9, 0.1]), threshold=0.5)
-    summary = TrainingSummary(1000, 1000, 7)
+    summary = TrainingSummary(1000, 1000, 7, "abc123")
     return build_experiment_record(
         plan, ScoringResult(metrics, 4), summary, 5, 60.0, "env.yml", smoke
     )
