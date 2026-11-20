@@ -30,9 +30,10 @@ from src.config import (
     DATASETS,
     MULTI_GNN_DIR,
     RUN_FOLDERS_NAME,
+    SEEDS,
     DatasetSpec,
 )
-from src.records import model_folder_for_run
+from src.records import make_run_id, model_folder_for_run
 
 FORMATTED_FILE_NAME = "formatted_transactions.csv"
 LAUNDERING_COLUMN = "Is Laundering"
@@ -150,7 +151,7 @@ def prepare_datasets(
         )
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     """Command-line options."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -159,7 +160,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--datasets", nargs="+", default=list(DATASETS), choices=list(DATASETS)
     )
-    return parser.parse_args()
+    parser.add_argument("--run-id", default=make_run_id("gin", "source", 1.0, SEEDS[0]))
+    parser.add_argument(
+        "--load-from-run-id", default=None, help="Run whose model to fine-tune"
+    )
+    return parser.parse_args(argv)
 
 
 def main() -> None:

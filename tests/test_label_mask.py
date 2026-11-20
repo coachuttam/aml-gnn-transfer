@@ -86,3 +86,47 @@ def test_masked_training_swaps_only_the_training_loader() -> None:
     loaders = get_loaders("tr", "val", "te", None, None, None, None, None)
     assert loaders == ("masked_train", "stock_validation", "stock_test")
     assert list(seen["kept"]) == [1, 5, 9]
+
+
+def test_a_smoke_run_without_a_stock_checkpoint_gets_its_last_epoch_saved(
+    tmp_path,
+) -> None:
+    from types import SimpleNamespace
+
+    from src.train_wrapper import saving_last_epoch_if_none
+
+    saved = []
+    modules = SimpleNamespace(
+        train_util=SimpleNamespace(
+            save_model=lambda *arguments: saved.append(arguments)
+        )
+    )
+    original = lambda *arguments: "final model"  # noqa: E731
+    outcome: dict = {}
+    train = saving_last_epoch_if_none(
+        original, modules, tmp_path / "missing.tar", outcome
+    )
+    arguments = [None] * 15
+    arguments[7], arguments[9], arguments[14] = (
+        "optimizer",
+        SimpleNamespace(n_epochs=10),
+        "config",
+    )
+    assert train(*arguments) == "final model"
+    assert saved == [("final model", "optimizer", 9, arguments[9], "config")]
+    assert outcome["last_epoch_saved"] is True
+
+
+def test_a_checkpoint_saved_during_training_is_left_alone(tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from src.train_wrapper import saving_last_epoch_if_none
+
+    checkpoint = tmp_path / "checkpoint_True.tar"
+    checkpoint.write_text("best epoch")
+    saved: list = []
+    modules = SimpleNamespace(train_util=SimpleNamespace(save_model=saved.append))
+    outcome: dict = {}
+    train = saving_last_epoch_if_none(lambda *a: "model", modules, checkpoint, outcome)
+    train(*([None] * 15))
+    assert saved == [] and "last_epoch_saved" not in outcome

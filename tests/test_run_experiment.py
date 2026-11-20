@@ -183,3 +183,37 @@ def test_the_command_line_accepts_a_step_budget() -> None:
         "--model gin --mode source --environment env.yml --step-budget-epochs 7".split()
     )
     assert arguments.step_budget_epochs == 7
+
+
+def test_a_run_refuses_to_start_if_its_own_checkpoint_already_exists(tmp_path) -> None:
+    from src.run_experiment import check_starting_point
+
+    plan = plan_run("gin", "scratch", 1.0, 0)
+    folder = tmp_path / plan.run_id
+    folder.mkdir()
+    (folder / "checkpoint_True.tar").write_text("old")
+    with pytest.raises(FileExistsError, match="new run id"):
+        check_starting_point(plan, tmp_path)
+
+
+def test_a_finetune_run_refuses_to_start_without_its_source_model(tmp_path) -> None:
+    from src.run_experiment import check_starting_point
+
+    with pytest.raises(FileNotFoundError, match="improves"):
+        check_starting_point(plan_run("gin", "finetune", 0.1, 0), tmp_path)
+
+
+def test_a_finetune_run_may_start_when_its_source_model_exists(tmp_path) -> None:
+    from src.run_experiment import check_starting_point
+
+    plan = plan_run("gin", "finetune", 0.1, 0)
+    source = tmp_path / plan.load_from_run_id
+    source.mkdir()
+    (source / "checkpoint_True.tar").write_text("model")
+    check_starting_point(plan, tmp_path)
+
+
+def test_a_smoke_training_request_is_marked_as_smoke() -> None:
+    plan = plan_run("gin", "scratch", 0.1, 0)
+    assert training_request(plan, smoke_test=True).smoke_test is True
+    assert training_request(plan).smoke_test is False

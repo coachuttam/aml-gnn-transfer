@@ -10,6 +10,8 @@ in functions on its `training` module, and put them back afterwards:
     period is not scored during training (AGENTS.md rule 2). The stock loop
     scores test every epoch; here its log lines say "not scored".
   * `get_model`: PNA is built with our full-training-graph degree table.
+  * `train_homo` / `train_hetero` (smoke tests only): if the stock loop saved no
+    checkpoint, the last epoch's model is saved, so a short run can always be scored.
 
 Everything else (loss, optimiser, epochs, best-validation checkpoint) is stock.
 With fewer labels an epoch has fewer steps; src/step_budget.py sets the epochs.
@@ -18,16 +20,16 @@ With fewer labels an epoch has fewer steps; src/step_budget.py sets the epochs.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 
 from src.degree_table import save_degree_table, training_degree_histogram
 from src.label_mask import fingerprint, keep_label_positions
 from src.model_builder import get_model_using_table
-from src.score_checkpoint import base_argv
+from src.score_checkpoint import base_argv, checkpoint_file
 from src.step_budget import steps_per_epoch
 
 EDGE_TYPE = ("node", "to", "node")
@@ -57,6 +59,7 @@ class TrainingRequest:
     epochs: int
     fraction: float
     finetune: bool
+    smoke_test: bool = False
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,7 @@ class TrainingSummary:
     laundering_labels_kept: int
     kept_labels_fingerprint: str
     steps_per_epoch: int
+    checkpoint_is_last_epoch: bool = False  # True if only the smoke fallback saved
 
 
 def training_argv(request: TrainingRequest) -> List[str]:
@@ -190,6 +194,44 @@ def build_replacements(
     }
 
 
+def saving_last_epoch_if_none(
+    original: Callable[..., Any],
+    modules: Any,
+    checkpoint: Path,
+    outcome: Dict[str, Any],
+) -> Callable[..., Any]:
+    """Wrap a stock train function: if it saved no checkpoint, save the last epoch."""
+
+    def train(*arguments: Any) -> Any:
+        model = original(*arguments)
+        if not checkpoint.exists():
+            # Positions follow Multi-GNN's train_homo / train_hetero signature.
+            optimizer, args, data_config = arguments[7], arguments[9], arguments[14]
+            last_epoch = args.n_epochs - 1
+            modules.train_util.save_model(
+                model, optimizer, last_epoch, args, data_config
+            )
+            outcome["last_epoch_saved"] = True
+        return model
+
+    return train
+
+
+def last_epoch_replacements(
+    modules: Any, checkpoint: Path, outcome: Dict[str, Any]
+) -> Dict[str, Callable[..., Any]]:
+    """The train functions to swap in for smoke tests."""
+    training = modules.training
+    return {
+        "train_homo": saving_last_epoch_if_none(
+            training.train_homo, modules, checkpoint, outcome
+        ),
+        "train_hetero": saving_last_epoch_if_none(
+            training.train_hetero, modules, checkpoint, outcome
+        ),
+    }
+
+
 def summarize_training_labels(
     train_data: Any, uses_reverse: bool, kept: np.ndarray, batch_size: int
 ) -> TrainingSummary:
@@ -216,6 +258,16 @@ def prepare_degree_table(
     return table
 
 
+def load_training_data(
+    request: TrainingRequest, modules: Any, data_config: Dict[str, Any]
+) -> Tuple[Any, Tuple[Any, ...]]:
+    """Parse Multi-GNN's arguments, set the seed and load the data."""
+    args = modules.util.create_parser().parse_args(training_argv(request))
+    modules.util.logger_setup()
+    modules.util.set_seed(args.seed)
+    return args, modules.data_loading.get_data(args, data_config)
+
+
 def train_model(
     request: TrainingRequest,
     modules: Any,
@@ -225,21 +277,23 @@ def train_model(
     """Train or fine-tune one model, from inside the run folder."""
     import torch
 
-    args = modules.util.create_parser().parse_args(training_argv(request))
-    modules.util.logger_setup()
-    modules.util.set_seed(args.seed)
-    train_data, val_data, test_data, train_inds, val_inds, test_inds = (
-        modules.data_loading.get_data(args, data_config)
-    )
+    args, data = load_training_data(request, modules, data_config)
+    train_data, val_data, test_data, train_inds, val_inds, test_inds = data
     uses_reverse = bool(args.reverse_mp)
     kept = keep_label_positions(len(train_inds), request.fraction, args.seed)
     table = prepare_degree_table(args, train_data, model_folder)
     summary = summarize_training_labels(train_data, uses_reverse, kept, args.batch_size)
-    kept_inds = train_inds[torch.as_tensor(kept)]
     replacements = build_replacements(modules, table, kept, uses_reverse)
+    outcome: Dict[str, Any] = {}
+    if request.smoke_test:
+        path = checkpoint_file(model_folder, request.finetune)
+        replacements.update(last_epoch_replacements(modules, path, outcome))
+    kept_inds = train_inds[torch.as_tensor(kept)]
     with patched_training(modules, replacements):
         modules.training.train_gnn(
             train_data, val_data, test_data, kept_inds, val_inds, test_inds,
             args, data_config,
         )  # fmt: skip
-    return summary
+    return replace(
+        summary, checkpoint_is_last_epoch=outcome.get("last_epoch_saved", False)
+    )

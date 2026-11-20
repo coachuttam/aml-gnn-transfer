@@ -24,6 +24,7 @@ from typing import List, Optional
 
 from src.config import (
     DATA_ROOT,
+    MODEL_ROOT,
     MULTI_GNN_DIR,
     PROJECT_ROOT,
     RUN_MODES,
@@ -112,7 +113,7 @@ def scoring_request(plan: RunPlan) -> ScoringRequest:
     )  # fmt: skip
 
 
-def training_request(plan: RunPlan) -> TrainingRequest:
+def training_request(plan: RunPlan, smoke_test: bool = False) -> TrainingRequest:
     """The training half of a plan."""
     return TrainingRequest(
         plan.model,
@@ -121,6 +122,7 @@ def training_request(plan: RunPlan) -> TrainingRequest:
         plan.epochs,
         plan.fraction,
         plan.finetuned,
+        smoke_test,
     )
 
 
@@ -154,6 +156,9 @@ def build_experiment_record(
         "laundering_labels_kept": summary.laundering_labels_kept if summary else None,
         "kept_labels_fingerprint": summary.kept_labels_fingerprint if summary else None,
         "label_mask_seed": plan.seed,
+        "checkpoint_is_last_epoch": (
+            summary.checkpoint_is_last_epoch if summary else None
+        ),
     }
     return RunRecord(
         run_id=plan.run_id, model=plan.model, mode=plan.mode,
@@ -175,11 +180,17 @@ def prepare_run_folder(plan: RunPlan) -> Path:
     return make_run_folder(run_folder_for(plan.run_id, DATA_ROOT), config)
 
 
-def check_starting_point(plan: RunPlan) -> None:
-    """Fail before spending GPU time if a model this run needs is missing."""
+def check_starting_point(plan: RunPlan, model_root: Path = MODEL_ROOT) -> None:
+    """Fail before spending GPU time if a needed model is missing or would be reused."""
+    if plan.trains:
+        folder = model_folder_for_run(plan.run_id, model_root)
+        own = checkpoint_file(folder, plan.finetuned)
+        if own.exists():
+            raise FileExistsError("%s already exists: use a new run id" % own)
     needed = plan.load_from_run_id or (None if plan.trains else plan.checkpoint_run_id)
     if needed is not None:
-        require_checkpoint(checkpoint_file(model_folder_for_run(needed), False))
+        source_folder = model_folder_for_run(needed, model_root)
+        require_checkpoint(checkpoint_file(source_folder, False))
 
 
 def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
@@ -193,7 +204,7 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
         modules = import_multignn_modules()
         data_config = json.loads((run_folder / "data_config.json").read_text())
         model_folder = model_folder_for_run(plan.run_id)
-        request = training_request(plan)
+        request = training_request(plan, smoke_test)
         summary = train_model(request, modules, data_config, model_folder)
     result = score_checkpoint(scoring_request(plan))
     record = build_experiment_record(
