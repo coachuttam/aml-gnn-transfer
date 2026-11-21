@@ -68,6 +68,21 @@ Limits that come with it:
 
 Pilot records are kept in `results/pilot/`, apart from `results/runs/`, so v2 runs can never overwrite them. Run it with `notebooks/colab_runner.ipynb` (`RUN_FULL = True` only after approval).
 
+### What the first pilot logs showed (observations, not results)
+
+These come from the first four pilot runs (seed 0, 3-epoch budget), read from the Colab logs, before the budget was reconsidered. They are validation F1 only, one seed, three validation points each. They are not comparisons.
+
+- **Fine-tuning converges much faster.** Fine-tuning from the HI-Small model started near its plateau (validation F1 0.19, 0.11, 0.19 over three validations at 100% of the labels), while the scratch run started at 0.00 and was still rising (0.00, 0.05, 0.14). So 3 epochs favours fine-tuning: it measures speed to a plateau, not where scratch would end up. This is why the budget is being raised.
+- **The source model is unstable.** On HI-Small, validation F1 went 0.22, then 0.50 at epoch 9, then 0.31. The best-validation checkpoint keeps the 0.50 epoch, but a noisy source model means the transfer result depends on which epoch was saved.
+- **Scratch can collapse at fewer labels.** At 25% of the labels, scratch training F1 fell to 0.0000 from epoch 2 and validation F1 stayed 0.0000, so no checkpoint was saved. A run like that is recorded with `status: "no_improvement"` and minority F1 0.0 (test not scored), instead of crashing. It is a finding about training from scratch with few positive labels, not a missing result.
+- **Loss weights are IBM's defaults.** GIN's loss weights the laundering class 6.275 to 1 (`model_settings.json`, copied unchanged into each run and stored in every record under `multignn_settings`). That is far below the real imbalance (about 1 laundering row in 2,000), so the weight does not correct for it. We have not changed it; doing so would leave IBM's published setting.
+
+### How a run can end
+
+`config.status` in every record is `completed` (a checkpoint was scored) or `no_improvement` (training finished but no epoch after the first had validation F1 above 0, so Multi-GNN saved nothing). For `no_improvement`, minority F1, precision and recall are recorded as 0.0 and every other metric as null, because test was not scored. Collect tables must show these runs, not drop them.
+
+If a pilot run's step budget changes, records and models made at the old budget are moved to `superseded/` folders, not overwritten or deleted, and those runs are done again.
+
 ## Results
 
 Not run yet.

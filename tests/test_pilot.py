@@ -127,7 +127,7 @@ def test_a_run_that_finished_training_is_not_moved_aside(tmp_path: Path) -> None
     run = PilotRun("gin", "scratch", 0.1, 0, 3)
     folder = model_folder_for_run(run.run_id, tmp_path)
     folder.mkdir(parents=True)
-    save_training_marker(folder, TrainingSummary(1, 1, 1, "x", 1), 1.0)
+    save_training_marker(folder, TrainingSummary(1, 1, 1, "x", 1), 1.0, 3)
     assert set_aside_partial_run(run, tmp_path) is None
     assert folder.exists()
 
@@ -161,4 +161,72 @@ def test_the_source_epochs_that_fit_in_three_hours_really_fit() -> None:
         run_minutes(fits, Timings()).total
         <= 180
         < run_minutes(too_long, Timings()).total
+    )
+
+
+def test_a_finished_run_from_another_budget_is_moved_aside_not_reused(
+    tmp_path: Path,
+) -> None:
+    from src.train_wrapper import TrainingSummary
+    from src.training_marker import save_training_marker
+
+    run = PilotRun("gin", "scratch", 0.25, 0, 8)
+    folder = model_folder_for_run(run.run_id, tmp_path)
+    folder.mkdir(parents=True)
+    save_training_marker(folder, TrainingSummary(1, 1, 1, "x", 1), 1.0, 3)
+    moved = set_aside_partial_run(run, tmp_path)
+    assert moved is not None and "other_budget" in moved.name and not folder.exists()
+
+
+def make_old_record(tmp_path: Path, run: PilotRun, budget: int) -> Path:
+    from src.records import RunRecord, write_record
+
+    record = RunRecord(
+        run.run_id, run.model, run.mode, run.fraction, run.seed,
+        {"step_budget_epochs": budget}, "c", "m", {}, 1, 1, 1.0,
+    )  # fmt: skip
+    return write_record(record, tmp_path)
+
+
+def test_records_from_another_budget_are_moved_to_superseded_and_kept(
+    tmp_path: Path,
+) -> None:
+    from src.pilot import supersede_other_budget_records
+
+    run = PilotRun("gin", "scratch", 1.0, 0, 8)
+    path = make_old_record(tmp_path, run, 3)
+    moved = supersede_other_budget_records([run], tmp_path)
+    assert not path.exists() and len(moved) == 1 and moved[0].exists()
+    assert moved[0].parent == tmp_path / "superseded"
+    assert not record_exists(run, tmp_path)  # so the run will be done again
+
+
+def test_records_at_the_current_budget_are_left_alone(tmp_path: Path) -> None:
+    from src.pilot import supersede_other_budget_records
+
+    run = PilotRun("gin", "source", 1.0, 0, 10)
+    path = make_old_record(tmp_path, run, 10)
+    assert supersede_other_budget_records([run], tmp_path) == []
+    assert path.exists()
+
+
+def test_a_second_superseded_record_never_overwrites_the_first(tmp_path: Path) -> None:
+    from src.pilot import supersede_other_budget_records
+
+    run = PilotRun("gin", "scratch", 1.0, 0, 8)
+    for _ in range(2):
+        make_old_record(tmp_path, run, 3)
+        supersede_other_budget_records([run], tmp_path)
+    assert len(list((tmp_path / "superseded").glob("*.json"))) == 2
+
+
+def test_the_estimate_can_price_other_budgets_and_seed_counts() -> None:
+    from src.estimate_pilot import total_hours
+
+    one_seed = pilot_runs(8, [0], include_source=False)
+    two_seeds = pilot_runs(8, [0, 1], include_source=False)
+    assert len(one_seed) == 6 and len(two_seeds) == 12
+    assert total_hours(two_seeds) > total_hours(one_seed)
+    assert total_hours(pilot_runs(8, [0], False)) > total_hours(
+        pilot_runs(3, [0], False)
     )

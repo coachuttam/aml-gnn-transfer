@@ -185,10 +185,15 @@ run(f"{PYTHON} -m src.prepare --run-id prepare_only")  # IBM's formatter, skippe
 
 COLAB_PILOT = r"""
 from src.config import MODEL_ROOT, RUN_RECORDS_DIR
-from src.pilot import pilot_runs, record_exists, set_aside_partial_run
+from src.pilot import (
+    pilot_runs, record_exists, set_aside_partial_run, supersede_other_budget_records,
+)
 
 run(f"{sys.executable} -m src.estimate_pilot")
 runs = pilot_runs()
+# Records made at another step budget are kept in records/superseded/ and the run is redone.
+for old in supersede_other_budget_records(runs, RUN_RECORDS_DIR):
+    print("Superseded (different step budget):", old)
 finished = sum(record_exists(item, RUN_RECORDS_DIR) for item in runs)
 print(f"\n{finished} of {len(runs)} pilot runs already have a record; those are skipped.")
 

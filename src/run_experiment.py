@@ -18,113 +18,32 @@ import argparse
 import json
 import os
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from src.config import (
-    DATA_ROOT,
-    MODEL_ROOT,
-    MULTI_GNN_DIR,
-    PROJECT_ROOT,
-    RUN_MODES,
-    SEEDS,
-    SMOKE_MAX_EPOCHS,
-    SOURCE_DATASET,
-    STEP_BUDGET_EPOCHS,
-    TARGET_DATASET,
+from src.config import DATA_ROOT, MODEL_ROOT, RUN_MODES, SEEDS, STEP_BUDGET_EPOCHS
+from src.experiment_record import (
+    build_experiment_record,
+    build_no_improvement_record,
+    read_training_settings,
 )
 from src.prepare import build_data_config, make_run_folder, run_folder_for
-from src.records import (
-    RunRecord,
-    git_commit,
-    make_run_id,
-    model_folder_for_run,
-    smoke_run_id,
-    write_record,
-)
+from src.records import model_folder_for_run, write_record
+from src.run_plan import RunPlan, plan_run, resolve_step_budget
 from src.score_checkpoint import (
     ScoringRequest,
-    ScoringResult,
     checkpoint_file,
     import_multignn_modules,
     require_checkpoint,
     score_checkpoint,
 )
-from src.step_budget import epochs_for_budget
 from src.train_wrapper import TrainingRequest, TrainingSummary, train_model
 from src.training_marker import (
     MARKER_NAME,
+    TrainingMarker,
     load_training_marker,
     save_training_marker,
 )
-
-
-@dataclass(frozen=True)
-class RunPlan:
-    """Everything decided before any compute is spent."""
-
-    run_id: str
-    model: str
-    mode: str
-    fraction: float
-    seed: int
-    dataset_name: str  # trained on and scored on
-    checkpoint_run_id: str  # whose model gets scored
-    load_from_run_id: Optional[str]  # whose model fine-tuning starts from
-    trains: bool
-    finetuned: bool
-    step_budget_epochs: int  # epochs at fraction 1.0 that set the step budget
-    epochs: int  # epochs this run trains for (0 for zero-shot)
-    validations: int  # validation passes in all: the same for every fraction
-
-
-def planned_epochs(mode: str, budget: int, fraction: float, smoke: bool) -> int:
-    """Epochs for a run: none for zero-shot, a short cap for smoke tests."""
-    if mode == "zero_shot":
-        return 0
-    epochs = epochs_for_budget(budget, fraction)
-    return min(epochs, SMOKE_MAX_EPOCHS) if smoke else epochs
-
-
-def plan_run(
-    model: str,
-    mode: str,
-    fraction: float,
-    seed: int,
-    step_budget_epochs: int = STEP_BUDGET_EPOCHS,
-    smoke: bool = False,
-    source_seed: Optional[int] = None,
-) -> RunPlan:
-    """Work out datasets, ids and which checkpoint to use for a run.
-
-    `source_seed` picks which source model a zero-shot or finetune run starts
-    from (default: the run's own seed). The pilot has one source model, seed 0.
-    """
-    run_id = make_run_id(model, mode, fraction, seed)  # also checks mode and fraction
-    if mode in ("source", "zero_shot") and fraction != 1.0:
-        raise ValueError("Mode %s always uses all labels (fraction 1.0)" % mode)
-    source_id = make_run_id(
-        model, "source", 1.0, seed if source_seed is None else source_seed
-    )
-    if smoke:
-        run_id, source_id = smoke_run_id(run_id), smoke_run_id(source_id)
-    epochs = planned_epochs(mode, step_budget_epochs, fraction, smoke)
-    return RunPlan(
-        run_id=run_id,
-        model=model,
-        mode=mode,
-        fraction=fraction,
-        seed=seed,
-        dataset_name=SOURCE_DATASET if mode == "source" else TARGET_DATASET,
-        checkpoint_run_id=source_id if mode == "zero_shot" else run_id,
-        load_from_run_id=source_id if mode == "finetune" else None,
-        trains=mode != "zero_shot",
-        finetuned=mode == "finetune",
-        step_budget_epochs=step_budget_epochs,
-        epochs=epochs,
-        validations=min(step_budget_epochs, epochs),
-    )
 
 
 def scoring_request(plan: RunPlan) -> ScoringRequest:
@@ -149,63 +68,6 @@ def training_request(plan: RunPlan, smoke_test: bool = False) -> TrainingRequest
     )
 
 
-def gradient_steps(plan: RunPlan, summary: Optional[TrainingSummary]) -> Optional[int]:
-    """Total optimiser steps the run was given, for checking budgets match."""
-    return summary.steps_per_epoch * plan.epochs if summary else None
-
-
-def build_experiment_record(
-    plan: RunPlan,
-    result: ScoringResult,
-    summary: Optional[TrainingSummary],
-    runtime_seconds: float,
-    environment: str,
-    smoke_test: bool,
-    scoring_resumed: bool = False,
-    training_seconds: float = 0.0,
-) -> RunRecord:
-    """Combine plan, scores and training facts into one record.
-
-    `scoring_resumed` is True when training finished in an earlier session and
-    this one only scored it; the runtime then adds the saved training time.
-    """
-    config = {
-        "dataset": plan.dataset_name,
-        "step_budget_epochs": plan.step_budget_epochs,
-        "epochs_requested": plan.epochs,
-        "validations": plan.validations,
-        "steps_per_epoch": summary.steps_per_epoch if summary else None,
-        "gradient_steps": gradient_steps(plan, summary),
-        "environment": environment,
-        "smoke_test": smoke_test,
-        "scoring_resumed": scoring_resumed,
-        # Phase times, so later estimates can use measured numbers per phase.
-        "training_seconds": training_seconds,
-        "scoring_seconds": runtime_seconds - training_seconds,
-        "stock_training_loop": False,
-        "checkpoint_run_id": plan.checkpoint_run_id,
-        "fine_tuned_from": plan.load_from_run_id,
-        "train_transactions": summary.train_transactions if summary else None,
-        "labels_kept": summary.labels_kept if summary else None,
-        "laundering_labels_kept": summary.laundering_labels_kept if summary else None,
-        "kept_labels_fingerprint": summary.kept_labels_fingerprint if summary else None,
-        "label_mask_seed": plan.seed,
-        "checkpoint_is_last_epoch": (
-            summary.checkpoint_is_last_epoch if summary else None
-        ),
-    }
-    return RunRecord(
-        run_id=plan.run_id, model=plan.model, mode=plan.mode,
-        fraction=plan.fraction, seed=plan.seed, config=config,
-        ours_commit=git_commit(PROJECT_ROOT),
-        multignn_commit=git_commit(MULTI_GNN_DIR),
-        metrics={"scored": result.metrics.to_dict()},
-        epochs_trained=plan.epochs,
-        best_epoch=result.best_epoch,
-        runtime_seconds=runtime_seconds,
-    )  # fmt: skip
-
-
 def prepare_run_folder(plan: RunPlan) -> Path:
     """Write data_config.json and model_settings.json for this run."""
     save_dir = model_folder_for_run(plan.run_id)
@@ -214,33 +76,46 @@ def prepare_run_folder(plan: RunPlan) -> Path:
     return make_run_folder(run_folder_for(plan.run_id, DATA_ROOT), config)
 
 
-def check_starting_point(plan: RunPlan, model_root: Path = MODEL_ROOT) -> None:
-    """Fail before spending GPU time if a needed model is missing or would be reused."""
-    if plan.trains:
-        folder = model_folder_for_run(plan.run_id, model_root)
-        own = checkpoint_file(folder, plan.finetuned)
-        if own.exists() and load_training_marker(folder) is None:
-            raise FileExistsError(
-                "%s exists but training never finished (no %s): move the folder "
-                "aside and start again" % (own, MARKER_NAME)
-            )
-    needed = plan.load_from_run_id or (None if plan.trains else plan.checkpoint_run_id)
-    if needed is not None and not resumes_scoring(plan, model_root):
-        source_folder = model_folder_for_run(needed, model_root)
-        require_checkpoint(checkpoint_file(source_folder, False))
+def finished_training(
+    plan: RunPlan, model_root: Path = MODEL_ROOT
+) -> Optional[TrainingMarker]:
+    """The training-complete marker, if this run finished at its current budget.
+
+    A marker from a different budget does not count: scoring it would judge a
+    model trained for another number of steps.
+    """
+    marker = load_training_marker(model_folder_for_run(plan.run_id, model_root))
+    if marker is None or marker.step_budget_epochs != plan.step_budget_epochs:
+        return None
+    return marker
+
+
+def has_checkpoint(plan: RunPlan, model_root: Path = MODEL_ROOT) -> bool:
+    """Did training save this run's best checkpoint?"""
+    folder = model_folder_for_run(plan.run_id, model_root)
+    return checkpoint_file(folder, plan.finetuned).exists()
 
 
 def resumes_scoring(plan: RunPlan, model_root: Path = MODEL_ROOT) -> bool:
-    """True if this run finished training earlier and only needs scoring.
-
-    Needs both its checkpoint and the training-complete marker. The source
-    model it fine-tunes from is then no longer needed.
-    """
-    if not plan.trains:
+    """True if this run finished training earlier and only needs scoring."""
+    if not plan.trains or finished_training(plan, model_root) is None:
         return False
-    folder = model_folder_for_run(plan.run_id, model_root)
-    has_checkpoint = checkpoint_file(folder, plan.finetuned).exists()
-    return has_checkpoint and load_training_marker(folder) is not None
+    return has_checkpoint(plan, model_root)
+
+
+def check_starting_point(plan: RunPlan, model_root: Path = MODEL_ROOT) -> None:
+    """Fail before spending GPU time if a needed model is missing or would be reused."""
+    finished = plan.trains and finished_training(plan, model_root) is not None
+    if plan.trains and has_checkpoint(plan, model_root) and not finished:
+        raise FileExistsError(
+            "%s has a checkpoint but training never finished at this budget "
+            "(no matching %s): move the folder aside and start again"
+            % (plan.run_id, MARKER_NAME)
+        )
+    needed = plan.load_from_run_id or (None if plan.trains else plan.checkpoint_run_id)
+    if needed is not None and not finished:
+        source_folder = model_folder_for_run(needed, model_root)
+        require_checkpoint(checkpoint_file(source_folder, False))
 
 
 def train_or_resume(
@@ -248,9 +123,9 @@ def train_or_resume(
 ) -> Tuple[TrainingSummary, float, bool]:
     """Training summary, training seconds, and whether training was already done."""
     model_folder = model_folder_for_run(plan.run_id)
-    marker = load_training_marker(model_folder)
-    if marker is not None and resumes_scoring(plan):
-        print("Training already finished for %s: scoring only" % plan.run_id)
+    marker = finished_training(plan)
+    if marker is not None:
+        print("Training already finished for %s: not training again" % plan.run_id)
         return marker.summary, marker.training_seconds, True
     modules = import_multignn_modules()
     data_config = json.loads((run_folder / "data_config.json").read_text())
@@ -258,7 +133,7 @@ def train_or_resume(
     request = training_request(plan, smoke_test)
     summary = train_model(request, modules, data_config, model_folder)
     seconds = time.time() - start
-    save_training_marker(model_folder, summary, seconds)
+    save_training_marker(model_folder, summary, seconds, plan.step_budget_epochs)
     return summary, seconds, False
 
 
@@ -267,31 +142,26 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
     check_starting_point(plan)
     run_folder = prepare_run_folder(plan)
     os.chdir(run_folder)  # Multi-GNN reads ./model_settings.json from here
+    settings = read_training_settings(run_folder, plan.model)
     summary, training_seconds, resumed = None, 0.0, False
     if plan.trains:
         summary, training_seconds, resumed = train_or_resume(
             plan, run_folder, smoke_test
         )
+        if not has_checkpoint(plan):  # a result, not a crash: see experiment_record
+            record = build_no_improvement_record(
+                plan, summary, training_seconds, environment, smoke_test,
+                resumed, settings,
+            )  # fmt: skip
+            return write_record(record)
     start = time.time()
     result = score_checkpoint(scoring_request(plan))
     runtime = training_seconds + time.time() - start
     record = build_experiment_record(
         plan, result, summary, runtime, environment, smoke_test, resumed,
-        training_seconds,
+        training_seconds, settings,
     )  # fmt: skip
     return write_record(record)
-
-
-def resolve_step_budget(mode: str, requested: Optional[int]) -> int:
-    """The step budget to use. Source runs must choose theirs on purpose."""
-    if requested is not None:
-        return requested
-    if mode == "source":
-        raise ValueError(
-            "Source runs need an explicit --step-budget-epochs "
-            "(HI-Small epochs are decided after the smoke-test timing)"
-        )
-    return STEP_BUDGET_EPOCHS
 
 
 def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:

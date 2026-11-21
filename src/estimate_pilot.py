@@ -25,6 +25,7 @@ from src.config import (
     HI_TO_LI_SIZE_RATIO,
     MEASURED_TRAIN_MINUTES_PER_FULL_LI_EPOCH,
     MEASURED_VALIDATION_MINUTES_LI,
+    PILOT_SEEDS,
     PILOT_SOURCE_EPOCHS,
 )
 from src.pilot import PilotRun, pilot_runs
@@ -109,6 +110,12 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--validation-minutes", type=float, default=None)
     parser.add_argument("--test-minutes", type=float, default=None)
     parser.add_argument("--load-minutes", type=float, default=None)
+    parser.add_argument("--budget", type=int, default=None, help="Step budget (epochs)")
+    parser.add_argument(
+        "--seeds", type=int, default=None, help="How many seeds (1 or 2)"
+    )
+    parser.add_argument("--skip-source", action="store_true",
+                        help="Price only the comparison runs")  # fmt: skip
     parser.add_argument("--units-per-hour", type=float, default=None)
     parser.add_argument("--units-remaining", type=float, default=COLAB_UNITS_AVAILABLE)
     return parser.parse_args(argv)
@@ -131,16 +138,23 @@ def print_measured(arguments: argparse.Namespace, runs: List[PilotRun]) -> None:
     rate = arguments.units_per_hour or COLAB_UNITS_PER_HOUR.get(arguments.gpu, 0.0)
     hours = total_hours(runs, timings)
     units = hours * rate
-    source_hours = run_minutes(runs[0], timings).total / 60
-    comparison_minutes = run_minutes(runs[1], timings).total
-    print("On %s: pilot %.1f h, about %.0f units" % (arguments.gpu, hours, units))
-    print("Source run alone: %.1f h" % source_hours)
-    print("Each comparison run: %.0f min" % comparison_minutes)
+    head = (arguments.gpu, len(runs), hours, units)
+    print("On %s: %d runs, %.1f h, about %.0f units" % head)
+    for run in runs:
+        if run.mode == "source":
+            source_hours = run_minutes(run, timings).total / 60
+            print("Source run alone: %.1f h" % source_hours)
+            if source_hours > APPROVAL_HOURS:
+                fit = source_epochs_within(APPROVAL_HOURS, timings)
+                print("Source exceeds %.0f h: %d epochs fit" % (APPROVAL_HOURS, fit))
+            break
+    comparison = [run for run in runs if run.mode != "source"]
+    if comparison:
+        print(
+            "Each comparison run: %.0f min" % run_minutes(comparison[0], timings).total
+        )
     if units > arguments.units_remaining:
         print("OVER: %.0f units needed, %.0f left" % (units, arguments.units_remaining))
-    if source_hours > APPROVAL_HOURS:
-        fit = source_epochs_within(APPROVAL_HOURS, timings)
-        print("Source exceeds %.0f h: %d epochs would fit" % (APPROVAL_HOURS, fit))
 
 
 def print_comparison(runs: List[PilotRun]) -> None:
@@ -159,7 +173,8 @@ def print_comparison(runs: List[PilotRun]) -> None:
 def main() -> None:
     """Print the estimate."""
     arguments = parse_arguments()
-    runs = pilot_runs()
+    seeds = PILOT_SEEDS[: arguments.seeds] if arguments.seeds else None
+    runs = pilot_runs(arguments.budget, seeds, not arguments.skip_source)
     count, epochs = len(runs), PILOT_SOURCE_EPOCHS
     print("Pilot: %d runs, source model for %d epochs" % (count, epochs))
     if arguments.gpu:
