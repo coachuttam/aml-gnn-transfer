@@ -55,22 +55,26 @@ Compute is limited, so the first results come from a **pilot**, not the full des
 | Model | GIN + EU | PNA + EU |
 | Source model | one HI-Small model, seed 0 | one per seed |
 | Label fractions | 10%, 25%, 100% | 50% |
-| Seeds | 0, 1 | 2 |
-| Step budget | 3 epochs at 100% | 5 (IBM's fine-tuning setting) |
-| Runs | 1 source + 12 (scratch and finetune) | 24 |
+| Seeds | 0 for now (seed 1 added after seeing scratch's 100% curve) | 1, 2 |
+| Step budget | 8 epochs at 100% (3 was too few) | 5 (IBM's fine-tuning setting) |
+| Source model | 10 epochs on HI-Small, seed 0 | |
+| Runs | 1 source + 6 (scratch and finetune); 12 if seed 1 is added | 24 |
+| Loss weights, learning rate | IBM's defaults for both setups | a weight sweep |
 
 Limits that come with it:
 - If Colab disconnects, a run that had finished training but not scoring is scored from its saved checkpoint (a `training_complete.json` marker proves training finished; its record says `scoring_resumed`). A run interrupted mid-training is set aside and started again.
-- Both seeds fine-tune from the **same** source model, so the finetune spread leaves out pre-training variance.
-- Two seeds is a thin spread. A gap inside it is not a result.
-- A 3-epoch budget may leave scratch under-trained, which would flatter pre-training.
+- With one seed there is **no spread at all**: a gap between scratch and finetune cannot be called a result, only a lead. Seed 1 would give two points, still thin.
+- Any seed fine-tunes from the **same** source model, so the finetune spread would leave out pre-training variance.
+- The budget was raised from 3 to 8 epochs because scratch was still improving at 3. Whether 8 is enough is read from scratch's 100% validation curve; if it is still rising, the pilot says so.
+- The first runs at budget 3 (source kept; scratch and finetune at 100%, scratch at 25%) are kept in `superseded/` folders and are not in the results.
+- If scratch at a low fraction collapses to predicting no laundering, it is recorded as `no_improvement` and reported as a finding. IBM's loss weights and learning rate are not changed; a weight sweep is v2.
 - The source model's epochs (`PILOT_SOURCE_EPOCHS`) are the owner's call, made after reading `python -m src.estimate_pilot`.
 
 Pilot records are kept in `results/pilot/`, apart from `results/runs/`, so v2 runs can never overwrite them. Run it with `notebooks/colab_runner.ipynb` (`RUN_FULL = True` only after approval).
 
 ### What the first pilot logs showed (observations, not results)
 
-These come from the first four pilot runs (seed 0, 3-epoch budget), read from the Colab logs, before the budget was reconsidered. They are validation F1 only, one seed, three validation points each. They are not comparisons.
+These come from the first four pilot runs (seed 0, 3-epoch budget, since superseded by budget 8), read from the Colab logs. They are validation F1 only, one seed, three validation points each. They are not comparisons.
 
 - **Fine-tuning converges much faster.** Fine-tuning from the HI-Small model started near its plateau (validation F1 0.19, 0.11, 0.19 over three validations at 100% of the labels), while the scratch run started at 0.00 and was still rising (0.00, 0.05, 0.14). So 3 epochs favours fine-tuning: it measures speed to a plateau, not where scratch would end up. This is why the budget is being raised.
 - **The source model is unstable.** On HI-Small, validation F1 went 0.22, then 0.50 at epoch 9, then 0.31. The best-validation checkpoint keeps the 0.50 epoch, but a noisy source model means the transfer result depends on which epoch was saved.

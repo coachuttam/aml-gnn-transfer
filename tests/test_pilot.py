@@ -11,10 +11,14 @@ from src.records import model_folder_for_run
 from src.run_experiment import parse_arguments, plan_run
 
 
-def test_the_pilot_has_one_source_model_then_twelve_comparison_runs() -> None:
+def test_the_pilot_has_one_source_model_then_six_comparison_runs() -> None:
     runs = pilot_runs()
     assert [run.mode for run in runs].count("source") == 1
-    assert runs[0].mode == "source" and len(runs) == 1 + 2 * 3 * 2
+    assert runs[0].mode == "source" and len(runs) == 1 + 1 * 3 * 2
+
+
+def test_adding_seed_one_later_gives_twelve_comparison_runs() -> None:
+    assert len(pilot_runs(seeds=[0, 1], include_source=False)) == 12
 
 
 def test_the_pilot_leaves_out_pna_seed_two_and_fifty_percent() -> None:
@@ -36,9 +40,9 @@ def test_seed_zero_is_finished_before_seed_one_starts() -> None:
     assert seeds == sorted(seeds)
 
 
-def test_every_comparison_run_uses_the_three_epoch_budget() -> None:
+def test_every_comparison_run_uses_the_eight_epoch_budget() -> None:
     budgets = {run.step_budget_epochs for run in pilot_runs()[1:]}
-    assert budgets == {3}
+    assert budgets == {8}
 
 
 def test_every_pilot_run_id_is_unique() -> None:
@@ -47,7 +51,8 @@ def test_every_pilot_run_id_is_unique() -> None:
 
 
 def test_both_seeds_fine_tune_from_the_one_seed_zero_source_model() -> None:
-    finetunes = [r for r in pilot_runs() if r.mode == "finetune" and r.seed == 1]
+    runs = pilot_runs(seeds=[0, 1])
+    finetunes = [r for r in runs if r.mode == "finetune" and r.seed == 1]
     arguments = parse_arguments(finetunes[0].command_words() + ["--environment", "x"])
     plan = plan_run(
         "gin", "finetune", arguments.fraction, arguments.seed,
@@ -97,9 +102,10 @@ def test_nothing_is_moved_when_there_is_no_earlier_attempt(tmp_path: Path) -> No
     )
 
 
-def test_a_source_run_costs_more_than_a_comparison_run_on_a_t4() -> None:
-    runs = pilot_runs()
-    assert run_minutes(runs[0]).total > run_minutes(runs[1]).total
+def test_a_comparison_run_costs_more_minutes_as_the_budget_rises() -> None:
+    small = run_minutes(pilot_runs(3, [0], False)[0]).total
+    large = run_minutes(pilot_runs(8, [0], False)[0]).total
+    assert large > small
 
 
 def test_comparison_runs_cost_the_same_at_every_fraction() -> None:

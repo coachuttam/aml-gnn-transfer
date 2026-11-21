@@ -166,7 +166,7 @@ def print_comparison(runs: List[PilotRun]) -> None:
         flag = "  <-- over budget" if row["units"] > COLAB_UNITS_AVAILABLE else ""
         values = (name, row["speed_vs_t4"], row["hours"], row["units"], flag)
         print("%-16s %5.1fx %8.1f %8.1f%s" % values)
-    print("\nUnits available: %d." % COLAB_UNITS_AVAILABLE)
+    print("\nUnits available: %.0f." % COLAB_UNITS_AVAILABLE)
     print("GPU rates and speed-ups are assumptions (see config.py).")
 
 
