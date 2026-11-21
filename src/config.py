@@ -20,6 +20,8 @@ MULTI_GNN_DIR = PROJECT_ROOT / "external" / "Multi-GNN"
 RESULTS_DIR = PROJECT_ROOT / "results"
 # Run records can be redirected too (Colab writes them straight to Drive).
 RUN_RECORDS_DIR = Path(os.environ.get("AML_RUN_RECORDS_DIR", RESULTS_DIR / "runs"))
+# Pilot records are copied here from Drive; kept apart from full-design runs.
+PILOT_RECORDS_DIR = RESULTS_DIR / "pilot"
 
 # Data and model weights are large and never committed (AGENTS.md rule 8).
 # The environment variables let the notebooks point at /kaggle/working or Google Drive.
