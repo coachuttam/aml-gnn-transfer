@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.config import PILOT_FRACTIONS, PILOT_SEEDS
-from src.estimate_pilot import estimate_table, run_minutes, total_t4_hours
+from src.estimate_pilot import estimate_table, run_minutes, total_hours
 from src.pilot import PilotRun, pilot_runs, record_exists, set_aside_partial_run
 from src.records import model_folder_for_run
 from src.run_experiment import parse_arguments, plan_run
@@ -111,7 +111,7 @@ def test_a_faster_gpu_takes_fewer_hours_but_may_use_more_units() -> None:
     table = estimate_table(pilot_runs())
     assert table["A100 hopeful"]["hours"] < table["T4 realistic"]["hours"]
     assert table["A100 realistic"]["units"] > table["T4 realistic"]["units"]
-    assert total_t4_hours(pilot_runs()) > 0
+    assert total_hours(pilot_runs()) > 0
 
 
 def test_every_pilot_command_is_accepted_by_the_run_experiment_parser() -> None:
