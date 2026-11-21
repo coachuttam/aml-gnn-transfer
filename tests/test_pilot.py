@@ -118,3 +118,15 @@ def test_every_pilot_command_is_accepted_by_the_run_experiment_parser() -> None:
     for run in pilot_runs():
         arguments = parse_arguments(run.command_words() + ["--environment", "x"])
         assert arguments.mode == run.mode and arguments.seed == run.seed
+
+
+def test_a_run_that_finished_training_is_not_moved_aside(tmp_path: Path) -> None:
+    from src.train_wrapper import TrainingSummary
+    from src.training_marker import save_training_marker
+
+    run = PilotRun("gin", "scratch", 0.1, 0, 3)
+    folder = model_folder_for_run(run.run_id, tmp_path)
+    folder.mkdir(parents=True)
+    save_training_marker(folder, TrainingSummary(1, 1, 1, "x", 1), 1.0)
+    assert set_aside_partial_run(run, tmp_path) is None
+    assert folder.exists()

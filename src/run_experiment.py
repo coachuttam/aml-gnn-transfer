@@ -20,7 +20,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.config import (
     DATA_ROOT,
@@ -53,6 +53,11 @@ from src.score_checkpoint import (
 )
 from src.step_budget import epochs_for_budget
 from src.train_wrapper import TrainingRequest, TrainingSummary, train_model
+from src.training_marker import (
+    MARKER_NAME,
+    load_training_marker,
+    save_training_marker,
+)
 
 
 @dataclass(frozen=True)
@@ -156,8 +161,13 @@ def build_experiment_record(
     runtime_seconds: float,
     environment: str,
     smoke_test: bool,
+    scoring_resumed: bool = False,
 ) -> RunRecord:
-    """Combine plan, scores and training facts into one record."""
+    """Combine plan, scores and training facts into one record.
+
+    `scoring_resumed` is True when training finished in an earlier session and
+    this one only scored it; the runtime then adds the saved training time.
+    """
     config = {
         "dataset": plan.dataset_name,
         "step_budget_epochs": plan.step_budget_epochs,
@@ -167,6 +177,7 @@ def build_experiment_record(
         "gradient_steps": gradient_steps(plan, summary),
         "environment": environment,
         "smoke_test": smoke_test,
+        "scoring_resumed": scoring_resumed,
         "stock_training_loop": False,
         "checkpoint_run_id": plan.checkpoint_run_id,
         "fine_tuned_from": plan.load_from_run_id,
@@ -204,12 +215,47 @@ def check_starting_point(plan: RunPlan, model_root: Path = MODEL_ROOT) -> None:
     if plan.trains:
         folder = model_folder_for_run(plan.run_id, model_root)
         own = checkpoint_file(folder, plan.finetuned)
-        if own.exists():
-            raise FileExistsError("%s already exists: use a new run id" % own)
+        if own.exists() and load_training_marker(folder) is None:
+            raise FileExistsError(
+                "%s exists but training never finished (no %s): move the folder "
+                "aside and start again" % (own, MARKER_NAME)
+            )
     needed = plan.load_from_run_id or (None if plan.trains else plan.checkpoint_run_id)
-    if needed is not None:
+    if needed is not None and not resumes_scoring(plan, model_root):
         source_folder = model_folder_for_run(needed, model_root)
         require_checkpoint(checkpoint_file(source_folder, False))
+
+
+def resumes_scoring(plan: RunPlan, model_root: Path = MODEL_ROOT) -> bool:
+    """True if this run finished training earlier and only needs scoring.
+
+    Needs both its checkpoint and the training-complete marker. The source
+    model it fine-tunes from is then no longer needed.
+    """
+    if not plan.trains:
+        return False
+    folder = model_folder_for_run(plan.run_id, model_root)
+    has_checkpoint = checkpoint_file(folder, plan.finetuned).exists()
+    return has_checkpoint and load_training_marker(folder) is not None
+
+
+def train_or_resume(
+    plan: RunPlan, run_folder: Path, smoke_test: bool
+) -> Tuple[TrainingSummary, float, bool]:
+    """Training summary, training seconds, and whether training was already done."""
+    model_folder = model_folder_for_run(plan.run_id)
+    marker = load_training_marker(model_folder)
+    if marker is not None and resumes_scoring(plan):
+        print("Training already finished for %s: scoring only" % plan.run_id)
+        return marker.summary, marker.training_seconds, True
+    modules = import_multignn_modules()
+    data_config = json.loads((run_folder / "data_config.json").read_text())
+    start = time.time()
+    request = training_request(plan, smoke_test)
+    summary = train_model(request, modules, data_config, model_folder)
+    seconds = time.time() - start
+    save_training_marker(model_folder, summary, seconds)
+    return summary, seconds, False
 
 
 def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
@@ -217,17 +263,16 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
     check_starting_point(plan)
     run_folder = prepare_run_folder(plan)
     os.chdir(run_folder)  # Multi-GNN reads ./model_settings.json from here
-    start = time.time()
-    summary = None
+    summary, training_seconds, resumed = None, 0.0, False
     if plan.trains:
-        modules = import_multignn_modules()
-        data_config = json.loads((run_folder / "data_config.json").read_text())
-        model_folder = model_folder_for_run(plan.run_id)
-        request = training_request(plan, smoke_test)
-        summary = train_model(request, modules, data_config, model_folder)
+        summary, training_seconds, resumed = train_or_resume(
+            plan, run_folder, smoke_test
+        )
+    start = time.time()
     result = score_checkpoint(scoring_request(plan))
+    runtime = training_seconds + time.time() - start
     record = build_experiment_record(
-        plan, result, summary, time.time() - start, environment, smoke_test
+        plan, result, summary, runtime, environment, smoke_test, resumed
     )
     return write_record(record)
 

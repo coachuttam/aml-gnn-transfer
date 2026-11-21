@@ -60,6 +60,7 @@ Compute is limited, so the first results come from a **pilot**, not the full des
 | Runs | 1 source + 12 (scratch and finetune) | 24 |
 
 Limits that come with it:
+- If Colab disconnects, a run that had finished training but not scoring is scored from its saved checkpoint (a `training_complete.json` marker proves training finished; its record says `scoring_resumed`). A run interrupted mid-training is set aside and started again.
 - Both seeds fine-tune from the **same** source model, so the finetune spread leaves out pre-training variance.
 - Two seeds is a thin spread. A gap inside it is not a result.
 - A 3-epoch budget may leave scratch under-trained, which would flatter pre-training.

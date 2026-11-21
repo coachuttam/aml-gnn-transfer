@@ -166,14 +166,16 @@ def test_the_command_line_accepts_a_step_budget() -> None:
     assert arguments.step_budget_epochs == 7
 
 
-def test_a_run_refuses_to_start_if_its_own_checkpoint_already_exists(tmp_path) -> None:
+def test_a_run_refuses_to_start_over_a_checkpoint_from_unfinished_training(
+    tmp_path,
+) -> None:
     from src.run_experiment import check_starting_point
 
     plan = plan_run("gin", "scratch", 1.0, 0)
     folder = tmp_path / plan.run_id
     folder.mkdir()
     (folder / "checkpoint_True.tar").write_text("old")
-    with pytest.raises(FileExistsError, match="new run id"):
+    with pytest.raises(FileExistsError, match="never finished"):
         check_starting_point(plan, tmp_path)
 
 

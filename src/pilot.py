@@ -26,6 +26,7 @@ from src.config import (
     PILOT_STEP_BUDGET_EPOCHS,
 )
 from src.records import make_run_id, model_folder_for_run, record_path
+from src.training_marker import load_training_marker
 
 
 @dataclass(frozen=True)
@@ -79,13 +80,14 @@ def record_exists(run: PilotRun, records_dir: Path) -> bool:
 def set_aside_partial_run(run: PilotRun, model_root: Path) -> Optional[Path]:
     """Move a dead attempt's model folder out of the way; never delete it.
 
-    A run with no record but a model folder was interrupted (a Colab
-    disconnect). Starting again needs a clean folder, because a run refuses to
-    start over an existing checkpoint. Returns where it went, or None.
+    A run with no record and no training-complete marker was interrupted while
+    training (a Colab disconnect). Starting again needs a clean folder, because a
+    run refuses to start over an existing checkpoint. A run that did finish
+    training is left alone: it only needs scoring. Returns where it went, or None.
     """
     folder = model_folder_for_run(run.run_id, model_root)
-    if not folder.exists():
-        return None
+    if not folder.exists() or load_training_marker(folder) is not None:
+        return None  # nothing there, or training finished: scoring resumes instead
     number = 1
     while folder.with_name("%s_interrupted_%d" % (folder.name, number)).exists():
         number += 1
