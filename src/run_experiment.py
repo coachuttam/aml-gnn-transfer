@@ -162,6 +162,7 @@ def build_experiment_record(
     environment: str,
     smoke_test: bool,
     scoring_resumed: bool = False,
+    training_seconds: float = 0.0,
 ) -> RunRecord:
     """Combine plan, scores and training facts into one record.
 
@@ -178,6 +179,9 @@ def build_experiment_record(
         "environment": environment,
         "smoke_test": smoke_test,
         "scoring_resumed": scoring_resumed,
+        # Phase times, so later estimates can use measured numbers per phase.
+        "training_seconds": training_seconds,
+        "scoring_seconds": runtime_seconds - training_seconds,
         "stock_training_loop": False,
         "checkpoint_run_id": plan.checkpoint_run_id,
         "fine_tuned_from": plan.load_from_run_id,
@@ -272,8 +276,9 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
     result = score_checkpoint(scoring_request(plan))
     runtime = training_seconds + time.time() - start
     record = build_experiment_record(
-        plan, result, summary, runtime, environment, smoke_test, resumed
-    )
+        plan, result, summary, runtime, environment, smoke_test, resumed,
+        training_seconds,
+    )  # fmt: skip
     return write_record(record)
 
 

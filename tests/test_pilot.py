@@ -130,3 +130,35 @@ def test_a_run_that_finished_training_is_not_moved_aside(tmp_path: Path) -> None
     save_training_marker(folder, TrainingSummary(1, 1, 1, "x", 1), 1.0)
     assert set_aside_partial_run(run, tmp_path) is None
     assert folder.exists()
+
+
+def test_measured_timings_replace_the_defaults() -> None:
+    from src.estimate_pilot import Timings, timings_from
+    from src.estimate_pilot import parse_arguments as parse
+
+    arguments = parse(
+        ["--gpu", "L4", "--train-minutes", "5", "--validation-minutes", "2"]
+    )
+    timings = timings_from(arguments)
+    assert (timings.train_per_full_epoch, timings.validation_pass) == (5, 2)
+    assert timings.graph_load == Timings().graph_load  # not given: default kept
+
+
+def test_faster_measured_timings_give_fewer_hours() -> None:
+    from src.estimate_pilot import Timings, total_hours
+
+    runs = pilot_runs()
+    assert total_hours(runs, Timings(5, 1.5, 1.5, 1)) < total_hours(runs)
+
+
+def test_the_source_epochs_that_fit_in_three_hours_really_fit() -> None:
+    from src.estimate_pilot import Timings, run_minutes, source_epochs_within
+
+    epochs = source_epochs_within(3.0, Timings())
+    fits = PilotRun("gin", "source", 1.0, 0, epochs)
+    too_long = PilotRun("gin", "source", 1.0, 0, epochs + 1)
+    assert (
+        run_minutes(fits, Timings()).total
+        <= 180
+        < run_minutes(too_long, Timings()).total
+    )

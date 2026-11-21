@@ -140,6 +140,8 @@ def test_a_run_that_finished_training_is_scored_without_training_again(
     assert record.config["scoring_resumed"] is True
     assert record.config["kept_labels_fingerprint"] == "abc123"
     assert record.runtime_seconds >= 1800.0  # the saved training time is counted
+    assert record.config["training_seconds"] == 1800.0
+    assert record.config["scoring_seconds"] >= 0.0
 
 
 def test_a_fresh_run_trains_then_writes_the_marker_so_it_can_be_resumed(
