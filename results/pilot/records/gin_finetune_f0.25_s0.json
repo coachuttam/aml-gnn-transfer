@@ -1,0 +1,59 @@
+{
+  "run_id": "gin_finetune_f0.25_s0",
+  "model": "gin",
+  "mode": "finetune",
+  "fraction": 0.25,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": 8,
+    "epochs_requested": 32,
+    "validations": 8,
+    "steps_per_epoch": 136,
+    "gradient_steps": 4352,
+    "environment": "env.yml / NVIDIA L4",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 3977.90692281723,
+    "scoring_seconds": 176.61135625839233,
+    "multignn_settings": {
+      "lr": 0.006213266113989207,
+      "w_ce1": 1.0000182882773443,
+      "w_ce2": 6.275014431494497,
+      "dropout": 0.00983468338330501,
+      "final_dropout": 0.10527690625126304,
+      "n_hidden": 66.00315515631006
+    },
+    "stock_training_loop": false,
+    "checkpoint_run_id": "gin_finetune_f0.25_s0",
+    "fine_tuned_from": "gin_source_f1.0_s0",
+    "train_transactions": 4432934,
+    "labels_kept": 1108234,
+    "laundering_labels_kept": 492,
+    "kept_labels_fingerprint": "a9524a4e6ddbc9ea",
+    "label_mask_seed": 0,
+    "checkpoint_is_last_epoch": false
+  },
+  "ours_commit": "14ae9f6a408f9bdafdc81f93f898788b0b4e85bf",
+  "multignn_commit": "252b0252afca109d1d216c411c59ff70753b25fc",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.2658227848101266,
+      "precision": 0.21805111821086262,
+      "recall": 0.3403990024937656,
+      "pr_auc": 0.2758670036940651,
+      "precision_at_100": 0.92,
+      "alerts": 1252,
+      "threshold": 0.4625987708568573,
+      "recall_at_alert_budget": {
+        "10000": 0.5648379052369077,
+        "25000": 0.6895261845386533,
+        "50000": 0.7543640897755611
+      }
+    }
+  },
+  "epochs_trained": 32,
+  "best_epoch": 4,
+  "runtime_seconds": 4154.518279075623
+}

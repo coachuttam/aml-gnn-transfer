@@ -220,3 +220,33 @@ def test_the_training_request_carries_the_validation_count() -> None:
     plan = plan_run("gin", "scratch", 0.25, 0, 3)
     assert training_request(plan).validations == 3
     assert plan_run("gin", "zero_shot", 1.0, 0).epochs == 0
+
+
+def test_a_run_suffix_renames_the_run_but_not_the_source_model_it_starts_from() -> None:
+    plan = plan_run("gin", "finetune", 1.0, 0, 20, source_seed=0, run_suffix="_b20")
+    assert plan.run_id == "gin_finetune_f1.0_s0_b20"
+    assert plan.load_from_run_id == "gin_source_f1.0_s0"
+
+
+def test_the_command_line_accepts_a_run_suffix() -> None:
+    arguments = parse_arguments(
+        "--model gin --mode scratch --environment e --run-suffix _b20".split()
+    )
+    assert arguments.run_suffix == "_b20"
+
+
+def test_a_zero_shot_run_has_a_budget_of_zero_not_the_default() -> None:
+    assert resolve_step_budget("zero_shot", None) == 0
+    assert plan_run("gin", "zero_shot", 1.0, 0, 0).step_budget_epochs == 0
+
+
+def test_a_finished_record_holds_validation_metrics_and_the_validation_curve() -> None:
+    plan = plan_run("gin", "scratch", 0.25, 0)
+    metrics = score_period(np.array([1, 0]), np.array([0.9, 0.1]), threshold=0.5)
+    result = ScoringResult(metrics, 4, validation_metrics=metrics)
+    record = build_experiment_record(
+        plan, result, TrainingSummary(1000, 1000, 7, "abc", 3), 60.0, "e", False,
+        extras={"validation_curve": [[4, 0.1]]},
+    )  # fmt: skip
+    assert record.metrics["validation"]["minority_f1"] == metrics.minority_f1
+    assert record.config["validation_curve"] == [[4, 0.1]]

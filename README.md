@@ -2,7 +2,7 @@
 
 Does pre-training a graph neural network on synthetic AML data reduce how many labelled laundering cases a bank needs?
 
-**Status: planned. Nothing has been run yet.** This README will hold the results once the experiments are done.
+**Status: pilot done (one seed, GIN only); Phases A to D are built and tested, not yet run.** The pilot numbers below are a first look, not the answer to RQ2.
 
 Docs: [PRD](PRD.md) · [Architecture](ARCHITECTURE.md) · [Design system](DESIGN_SYSTEM.md) · [Agent instructions](AGENTS.md)
 
@@ -89,7 +89,48 @@ If a pilot run's step budget changes, records and models made at the old budget 
 
 ## Results
 
-Not run yet.
+### Pilot (GIN, one seed): a first look, not a result
+
+Multi-GIN + EU, seed 0, step budget 8 epochs at 100% of labels (equal gradient steps at every share), one shared HI-Small source model (10 epochs). Test period of LI-Small, threshold chosen on validation, test scored once. Records: `results/pilot/records/`; table: `results/summary.csv`; charts: `results/pilot/`.
+
+| System | Labels | Seeds | Epochs (best/run) | Minority F1 | PR-AUC | Precision@100 | Recall@25k |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Trained from scratch | 10% | 1 | 60/80 | 15.7% | 0.072 | 35.0% | 46.4% |
+| Pre-trained on HI-Small, then fine-tuned | 10% | 1 | 40/80 | 22.8% | 0.165 | 76.0% | 59.4% |
+| Trained from scratch | 25% | 1 | 24/32 | 16.1% | 0.095 | 44.0% | 56.4% |
+| Pre-trained on HI-Small, then fine-tuned | 25% | 1 | 4/32 | 26.6% | 0.276 | 92.0% | 69.0% |
+| Trained on HI-Small (scored on HI-Small test) | 100% | 1 | 9/10 | 60.5% | 0.571 | 91.0% | 84.2% |
+| Trained from scratch | 100% | 1 | 7/8 | 20.5% | 0.210 | 83.0% | 66.8% |
+| Pre-trained on HI-Small, then fine-tuned | 100% | 1 | 8/8 | 33.1% | 0.280 | 90.0% | 74.1% |
+
+![Pilot: minority F1 against label share](results/pilot/label_scarcity_f1.png)
+
+The fine-tuned model scores higher than the one trained from scratch at 10%, 25% and 100% of the labels (22.8 vs 15.7, 26.6 vs 16.1, 33.1 vs 20.5 minority F1). **With one seed this is a lead, not a result**: there is no spread to compare the gaps against, so none of them is called a win.
+
+For scale, Egressy et al. (2024) report 26.88 minority F1 for Multi-GIN + EU on LI-Small (this is their number, not ours, and it is the line on the chart). Altman et al. (2023) report 27.38 for PNA after fine-tuning. We have not yet reproduced either.
+
+Caveats:
+- **One seed.** No standard deviation exists. Phase C adds seeds 0, 1 and 2.
+- **Budget 8.** Both 100% runs were still near their best at the last epoch (best validation epoch 8 of 8 for fine-tune, 7 of 8 for scratch), so 8 epochs may be too short, most of all for scratch. Phase A reruns both at budget 20.
+- **One source model.** Every fine-tune starts from the same HI-Small model (seed 0), so a spread over seeds would leave out pre-training variance. That source model's validation F1 was unstable between epochs.
+- **No validation numbers in the pilot records.** They were written before records carried validation metrics and curves. New records carry both; `python -m src.export_curves` can make curve files for the pilot from the Drive logs.
+- **Thresholds.** The alert threshold is the best-F1 threshold on the validation period, as in Project 2.
+- **Superseded runs.** The first runs at budget 3 are kept in `results/pilot/records/superseded/` and are not in the table.
+
+### Phases A to D (built, not yet run)
+
+All run from `notebooks/colab_runner.ipynb` by setting `RUN_SET` in its first cell. Sets are described in `configs/phases.yaml`; the numbers behind them are named constants in `src/config.py`.
+
+| RUN_SET | What it runs | Runs |
+| --- | --- | --- |
+| `phaseB` | Zero-shot: the pilot's GIN source model scored on LI-Small test, no training. The threshold is chosen on LI-Small validation (one number, so slightly generous to zero-shot) | 1 |
+| `phaseA` | GIN, 100% labels, scratch and fine-tune, budget 20, every epoch validated (ids end `_b20`; the pilot is not touched) | 2 |
+| `phaseC` | GIN, fractions 10/25/50/100% x scratch/fine-tune x seeds 0, 1, 2, nested label masks, at `BUDGET_C` | 24 |
+| `phaseD` | Train `pna_source_f1.0_s0` on HI-Small (Multi-PNA + EU), then the Phase C grid with PNA; seeds in `PHASE_D_SEEDS` (default 0) | 9 |
+
+`BUDGET_C` is `None` until it is set in `src/config.py` after reading Phase A; Phases C and D refuse to start without it. Every run prints an estimate, then its real minutes and Colab units with a running total, and a run expected to pass 3 GPU hours stops unless the owner has approved it (`ALLOW_LONG_RUNS`). A finished run (record with status `completed` or `no_improvement`) is skipped on a re-run, and each finished scratch/fine-tune pair is checked for identical kept labels and equal gradient steps.
+
+Tables and charts for any set: `python -m src.collect` then `python -m src.plot --run-set phaseC` (mean ± standard deviation over seeds, one panel per model, plus validation curves for runs that have them).
 
 ## Quick start
 
@@ -105,7 +146,7 @@ python -m pytest -q
 
 On Kaggle: open `notebooks/kaggle_runner.ipynb`, attach the [IBM AML dataset](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml), switch the GPU on, and run the cells.
 
-On Colab: open `notebooks/colab_runner.ipynb`, put your Kaggle token at `aml-gnn-transfer/kaggle.json` in Drive, switch the GPU on, and run the cells. It starts as a smoke test; the notebooks are written by `python -m tools.make_notebooks`.
+On Colab: open `notebooks/colab_runner.ipynb`, put your Kaggle token at `aml-gnn-transfer/kaggle.json` in Drive, switch the GPU on, set `RUN_SET` in the first cell and run the cells. It starts as a smoke test (`RUN_SET = "smoke"`); the notebooks are written by `python -m tools.make_notebooks`. The Kaggle token stays on Drive and is never committed.
 
 ## Related projects
 

@@ -54,13 +54,15 @@ def plan_run(
     step_budget_epochs: int = STEP_BUDGET_EPOCHS,
     smoke: bool = False,
     source_seed: Optional[int] = None,
+    run_suffix: str = "",
 ) -> RunPlan:
     """Work out datasets, ids and which checkpoint to use for a run.
 
     `source_seed` picks which source model a zero-shot or finetune run starts
     from (default: the run's own seed). The pilot has one source model, seed 0.
+    `run_suffix` renames this run only, never the source model it starts from.
     """
-    run_id = make_run_id(model, mode, fraction, seed)  # also checks mode and fraction
+    run_id = make_run_id(model, mode, fraction, seed, run_suffix)  # checks mode too
     if mode in ("source", "zero_shot") and fraction != 1.0:
         raise ValueError("Mode %s always uses all labels (fraction 1.0)" % mode)
     source_id = make_run_id(
@@ -87,7 +89,12 @@ def plan_run(
 
 
 def resolve_step_budget(mode: str, requested: Optional[int]) -> int:
-    """The step budget to use. Source runs must choose theirs on purpose."""
+    """The step budget to use. Source runs must choose theirs on purpose.
+
+    Zero-shot runs train nothing, so their budget is 0 (not the default 5).
+    """
+    if mode == "zero_shot":
+        return 0
     if requested is not None:
         return requested
     if mode == "source":

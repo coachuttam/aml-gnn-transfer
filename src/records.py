@@ -41,13 +41,19 @@ class RunRecord:
     runtime_seconds: float
 
 
-def make_run_id(model: str, mode: str, fraction: float, seed: int) -> str:
-    """Run id that reads as its settings, e.g. `pna_finetune_f0.25_s1`."""
+def make_run_id(
+    model: str, mode: str, fraction: float, seed: int, suffix: str = ""
+) -> str:
+    """Run id that reads as its settings, e.g. `pna_finetune_f0.25_s1`.
+
+    `suffix` marks a run that must not share an id with another run of the same
+    settings, e.g. "_b20" for Phase A's 20-epoch budget: `gin_scratch_f1.0_s0_b20`.
+    """
     if mode not in RUN_MODES:
         raise ValueError("Unknown mode %r, expected one of %s" % (mode, RUN_MODES))
     if not 0 < fraction <= 1:
         raise ValueError("Label fraction must be in (0, 1], got %r" % fraction)
-    return "%s_%s_f%s_s%d" % (model, mode, float(fraction), seed)
+    return "%s_%s_f%s_s%d%s" % (model, mode, float(fraction), seed, suffix)
 
 
 def smoke_run_id(run_id: str) -> str:

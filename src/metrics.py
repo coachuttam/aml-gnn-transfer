@@ -102,3 +102,15 @@ def score_run(
     """Pick the threshold on validation, then score the test period once with it."""
     threshold = best_f1_threshold(validation_truth, validation_scores)
     return score_period(test_truth, test_scores, threshold)
+
+
+def score_validation(
+    validation_truth: np.ndarray, validation_scores: np.ndarray
+) -> RunMetrics:
+    """Validation metrics at the threshold chosen on validation itself.
+
+    The F1 here is the best validation F1 (the threshold is tuned on these very
+    rows), so it is an upper bound used to compare runs, never a test figure.
+    """
+    threshold = best_f1_threshold(validation_truth, validation_scores)
+    return score_period(validation_truth, validation_scores, threshold)

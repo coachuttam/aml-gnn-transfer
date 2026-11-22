@@ -29,10 +29,11 @@ from src.config import (
     MULTI_GNN_ADAPTATION_FLAGS,
     MULTI_GNN_DIR,
     SEEDS,
+    SOURCE_MODEL_ROOT,
 )
 from src.degree_table import load_degree_table
 from src.graph_cache import load_graph_data
-from src.metrics import RunMetrics, score_run
+from src.metrics import RunMetrics, score_run, score_validation
 from src.model_builder import build_model
 from src.prepare import run_folder_for
 from src.records import model_folder_for_run
@@ -59,6 +60,7 @@ class ScoringResult:
 
     metrics: RunMetrics
     best_epoch: int
+    validation_metrics: Optional[RunMetrics] = None
 
 
 @dataclass
@@ -247,11 +249,18 @@ def score_checkpoint(request: ScoringRequest) -> ScoringResult:
     modules.util.set_seed(args.seed)
     data = prepare_loaders(modules, args, json.loads(config_path.read_text()))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model_folder = model_folder_for_run(request.checkpoint_run_id)
+    # A zero-shot run scores a source model trained earlier, kept in its own root.
+    root = SOURCE_MODEL_ROOT if request.checkpoint_run_id != request.run_id else None
+    model_folder = (
+        model_folder_for_run(request.checkpoint_run_id, root)
+        if root
+        else model_folder_for_run(request.checkpoint_run_id)
+    )
     path = require_checkpoint(checkpoint_file(model_folder, request.finetuned))
     model, best_epoch = load_trained_model(modules, args, data, path, device)
     arrays = collect_both_periods(data, model, device, bool(args.reverse_mp))
-    return ScoringResult(score_run(*arrays), best_epoch)
+    validation = score_validation(arrays[0], arrays[1])
+    return ScoringResult(score_run(*arrays), best_epoch, validation)
 
 
 def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:

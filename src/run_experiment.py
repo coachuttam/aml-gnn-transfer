@@ -21,13 +21,21 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from src.config import DATA_ROOT, MODEL_ROOT, RUN_MODES, SEEDS, STEP_BUDGET_EPOCHS
+from src.config import (
+    DATA_ROOT,
+    MODEL_ROOT,
+    RUN_MODES,
+    SEEDS,
+    SOURCE_MODEL_ROOT,
+    STEP_BUDGET_EPOCHS,
+)
 from src.experiment_record import (
     build_experiment_record,
     build_no_improvement_record,
     read_training_settings,
 )
 from src.prepare import build_data_config, make_run_folder, run_folder_for
+from src.read_log import read_validation_curve
 from src.records import model_folder_for_run, write_record
 from src.run_plan import RunPlan, plan_run, resolve_step_budget
 from src.score_checkpoint import (
@@ -71,7 +79,11 @@ def training_request(plan: RunPlan, smoke_test: bool = False) -> TrainingRequest
 def prepare_run_folder(plan: RunPlan) -> Path:
     """Write data_config.json and model_settings.json for this run."""
     save_dir = model_folder_for_run(plan.run_id)
-    load_dir = model_folder_for_run(plan.load_from_run_id or plan.run_id)
+    load_dir = (
+        model_folder_for_run(plan.load_from_run_id, SOURCE_MODEL_ROOT)
+        if plan.load_from_run_id
+        else save_dir
+    )
     config = build_data_config(DATA_ROOT, save_dir, load_dir)
     return make_run_folder(run_folder_for(plan.run_id, DATA_ROOT), config)
 
@@ -103,7 +115,11 @@ def resumes_scoring(plan: RunPlan, model_root: Path = MODEL_ROOT) -> bool:
     return has_checkpoint(plan, model_root)
 
 
-def check_starting_point(plan: RunPlan, model_root: Path = MODEL_ROOT) -> None:
+def check_starting_point(
+    plan: RunPlan,
+    model_root: Path = MODEL_ROOT,
+    source_root: Optional[Path] = None,
+) -> None:
     """Fail before spending GPU time if a needed model is missing or would be reused."""
     finished = plan.trains and finished_training(plan, model_root) is not None
     if plan.trains and has_checkpoint(plan, model_root) and not finished:
@@ -114,7 +130,7 @@ def check_starting_point(plan: RunPlan, model_root: Path = MODEL_ROOT) -> None:
         )
     needed = plan.load_from_run_id or (None if plan.trains else plan.checkpoint_run_id)
     if needed is not None and not finished:
-        source_folder = model_folder_for_run(needed, model_root)
+        source_folder = model_folder_for_run(needed, source_root or model_root)
         require_checkpoint(checkpoint_file(source_folder, False))
 
 
@@ -139,10 +155,11 @@ def train_or_resume(
 
 def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
     """Train if needed, score, and write the record. Returns the record's path."""
-    check_starting_point(plan)
+    check_starting_point(plan, MODEL_ROOT, SOURCE_MODEL_ROOT)
     run_folder = prepare_run_folder(plan)
     os.chdir(run_folder)  # Multi-GNN reads ./model_settings.json from here
     settings = read_training_settings(run_folder, plan.model)
+    extras = {"validation_curve": read_validation_curve(run_folder)}
     summary, training_seconds, resumed = None, 0.0, False
     if plan.trains:
         summary, training_seconds, resumed = train_or_resume(
@@ -151,7 +168,7 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
         if not has_checkpoint(plan):  # a result, not a crash: see experiment_record
             record = build_no_improvement_record(
                 plan, summary, training_seconds, environment, smoke_test,
-                resumed, settings,
+                resumed, settings, extras,
             )  # fmt: skip
             return write_record(record)
     start = time.time()
@@ -159,7 +176,7 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
     runtime = training_seconds + time.time() - start
     record = build_experiment_record(
         plan, result, summary, runtime, environment, smoke_test, resumed,
-        training_seconds, settings,
+        training_seconds, settings, extras,
     )  # fmt: skip
     return write_record(record)
 
@@ -185,6 +202,11 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         help="Seed of the source model to fine-tune from (default: --seed)",
     )
+    parser.add_argument(
+        "--run-suffix",
+        default="",
+        help="Appended to this run's id (never to its source model's), e.g. _b20",
+    )
     parser.add_argument("--smoke-test", action="store_true")
     return parser.parse_args(argv)
 
@@ -196,6 +218,7 @@ def main() -> None:
     plan = plan_run(
         arguments.model, arguments.mode, arguments.fraction,
         arguments.seed, budget, arguments.smoke_test, arguments.source_seed,
+        arguments.run_suffix,
     )  # fmt: skip
     path = run_experiment(plan, arguments.environment, arguments.smoke_test)
     print("Wrote record: %s" % path)

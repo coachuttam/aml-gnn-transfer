@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional
 
 START_MARKER = "Retrieving data"  # first line of every Multi-GNN run
@@ -71,3 +72,25 @@ def multignn_best_epoch(epochs: List[EpochScores]) -> EpochScores:
             best_validation_f1 = scores.validation_f1
             chosen = scores
     return chosen
+
+
+def validation_curve(epochs: List[EpochScores]) -> List[List[float]]:
+    """[epoch, validation F1] for every epoch that was really validated.
+
+    Epochs count from 1, like `best_epoch` in a run record. Epochs the wrapper
+    skipped ("not scored") are left out. This is Multi-GNN's own F1 (argmax), a
+    progress curve, not the threshold-tuned F1 the record scores.
+    """
+    return [
+        [scores.epoch + 1, scores.validation_f1]
+        for scores in epochs
+        if scores.validation_f1 is not None
+    ]
+
+
+def read_validation_curve(run_folder: Path) -> List[List[float]]:
+    """The curve from `<run folder>/logs/logs.log`; empty if there is no log."""
+    log_file = run_folder / "logs" / "logs.log"
+    if not log_file.exists():
+        return []
+    return validation_curve(parse_epoch_scores(log_file.read_text()))

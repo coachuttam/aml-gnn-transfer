@@ -83,3 +83,22 @@ def test_a_wrapper_log_with_unscored_test_epochs_still_parses() -> None:
     )
     epochs = parse_epoch_scores(text)
     assert epochs[0].validation_f1 == 0.2 and epochs[0].test_f1 is None
+
+
+def test_the_validation_curve_has_one_point_per_validated_epoch_counted_from_one() -> (
+    None
+):
+    from src.read_log import validation_curve
+
+    log = (
+        "Retrieving data\n"
+        "Train F1: 0.1\nValidation F1: not scored\nTest F1: not scored\n"
+        "Train F1: 0.2\nValidation F1: 0.3000\nTest F1: not scored\n"
+    )
+    assert validation_curve(parse_epoch_scores(log)) == [[2, 0.3]]
+
+
+def test_a_run_folder_without_a_log_has_an_empty_curve(tmp_path) -> None:
+    from src.read_log import read_validation_curve
+
+    assert read_validation_curve(tmp_path) == []

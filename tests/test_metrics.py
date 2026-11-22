@@ -83,3 +83,11 @@ def test_score_run_takes_its_threshold_from_validation_not_from_test() -> None:
 def test_metrics_turn_into_a_plain_dictionary_for_the_json_record() -> None:
     metrics = score_period(np.array([1, 0]), np.array([0.9, 0.1]), threshold=0.5)
     assert metrics.to_dict()["minority_f1"] == 1.0
+
+
+def test_validation_metrics_use_a_threshold_chosen_on_validation_itself() -> None:
+    from src.metrics import score_validation
+
+    truth, scores = np.array([1, 1, 0, 0]), np.array([0.9, 0.6, 0.4, 0.1])
+    result = score_validation(truth, scores)
+    assert result.minority_f1 == 1.0 and 0.4 < result.threshold <= 0.6

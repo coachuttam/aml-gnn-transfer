@@ -112,3 +112,8 @@ def test_untracked_files_do_not_mark_a_commit_as_dirty(tmp_path: Path) -> None:
 
 def test_a_smoke_test_run_id_never_equals_the_real_run_id() -> None:
     assert smoke_run_id("gin_source_f1.0_s0") == "gin_source_f1.0_s0_smoke"
+
+
+def test_a_suffix_goes_at_the_end_of_the_run_id() -> None:
+    assert make_run_id("gin", "scratch", 1.0, 0, "_b20") == "gin_scratch_f1.0_s0_b20"
+    assert make_run_id("gin", "zero_shot", 1.0, 0) == "gin_zero_shot_f1.0_s0"

@@ -5,7 +5,7 @@ This project has no app in v1. Its outputs are tables, one main chart and a READ
 ## Principles
 
 - **Lead with the answer.** Every chart title states the finding ("Pre-training halves the labels needed"), not the axes ("F1 vs fraction"). If the finding is negative, the title says that.
-- **Show the spread.** Every point from several seeds shows its range. A gap inside the range is not called a difference.
+- **Show the spread.** Every point from several seeds shows its range (±1 standard deviation). A gap inside the range is not called a difference.
 - **Plain words for systems.** Readers see "Trained from scratch" and "Pre-trained on HI-Small, then fine-tuned", not `scratch` and `finetune`.
 - **Say what the data is.** Every chart and table carries a footnote: "IBM AML (synthetic), LI-Small test period."
 
@@ -33,7 +33,7 @@ This project has no app in v1. Its outputs are tables, one main chart and a READ
 
 - x-axis: share of LI-Small training labels used (10%, 25%, 50%, 100%), evenly spaced.
 - y-axis: minority F1 (%) from 0. A second version with PR-AUC goes in `results/`.
-- Two lines with markers: blue (fine-tuned) and grey (scratch). Each point is the mean of 3 seeds, with a whisker from min to max.
+- Two lines with markers: blue (fine-tuned) and grey (scratch). Each point is the mean over seeds, with a whisker of ±1 standard deviation (no whisker with one seed, and the footnote says so). With two models run, one panel per model.
 - Label the gap at 10% directly on the chart ("+X F1 points").
 - A dashed horizontal line for IBM's reported fine-tuned value (27.38) if it falls in range, labelled "IBM, Table 3".
 - Sizes: 1600×900 for the README, 1080×1350 for LinkedIn. White background, sans-serif, no chart-junk.

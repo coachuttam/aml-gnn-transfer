@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MULTI_GNN_DIR = PROJECT_ROOT / "external" / "Multi-GNN"
@@ -21,12 +21,19 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 # Run records can be redirected too (Colab writes them straight to Drive).
 RUN_RECORDS_DIR = Path(os.environ.get("AML_RUN_RECORDS_DIR", RESULTS_DIR / "runs"))
 # Pilot records are copied here from Drive; kept apart from full-design runs.
-PILOT_RECORDS_DIR = RESULTS_DIR / "pilot"
+PILOT_RECORDS_DIR = RESULTS_DIR / "pilot" / "records"
+# Records of Phases A-D are copied from Drive to results/phases/<set>/records/.
+PHASES_RESULTS_DIR = RESULTS_DIR / "phases"
+# The run sets (pilot, phaseA..D) are described in this file.
+PHASES_FILE = PROJECT_ROOT / "configs" / "phases.yaml"
 
 # Data and model weights are large and never committed (AGENTS.md rule 8).
 # The environment variables let the notebooks point at /kaggle/working or Google Drive.
 DATA_ROOT = Path(os.environ.get("AML_DATA_ROOT", PROJECT_ROOT / "data"))
 MODEL_ROOT = Path(os.environ.get("AML_MODEL_ROOT", PROJECT_ROOT / "models"))
+# Fine-tuning and zero-shot runs start from a HI-Small source model that was trained
+# in an earlier run set (the pilot), so its folder can differ from MODEL_ROOT.
+SOURCE_MODEL_ROOT = Path(os.environ.get("AML_SOURCE_MODEL_ROOT", MODEL_ROOT))
 
 # Building the graph (reading the CSV, adding ports) takes several minutes of CPU,
 # so it is done once per dataset and settings, then loaded from here by training
@@ -148,3 +155,35 @@ GPU_SPEED_CASES: Dict[str, Tuple[float, float]] = {
     "A100": (1.0, 2.5),
 }
 COLAB_UNITS_AVAILABLE = 59.76  # the owner's balance when the budget was set
+
+# --- Phases A-D (configs/phases.yaml names these constants) ---
+# Phase A: a longer budget for GIN at 100% of labels, to see whether scratch and
+# finetune are still improving after 8 epochs. Every epoch is validated.
+PHASE_A_BUDGET = 20
+
+# Phase C's budget, in epochs at fraction 1.0. None on purpose: the owner sets it
+# after reading Phase A, and Phases C and D refuse to start until it is a number.
+BUDGET_C: Optional[int] = None
+
+# Phase D: Multi-PNA + EU. One seed by default because PNA is slower than GIN;
+# more seeds can be passed to src.run_phase with --seeds.
+PHASE_D_SEEDS: Tuple[int, ...] = (0,)
+# The PNA source model trains on HI-Small for as many epochs as the GIN one did.
+PHASE_D_SOURCE_EPOCHS = PILOT_SOURCE_EPOCHS
+
+# Statuses that mean "this run is finished": a re-run skips it.
+FINISHED_STATUSES: Tuple[str, ...] = ("completed", "no_improvement")
+
+# --- Time and units per run (src/phase_estimate.py) ---
+# Measured in the pilot on a Colab L4 (results/pilot/records): about 4,100 s to
+# train and validate 8 budget epochs, and about 177 s to score at the end.
+L4_MINUTES_PER_BUDGET_EPOCH = 8.6  # one epoch's steps at 100%, plus one validation
+L4_MINUTES_FINAL_SCORING = 3.0  # validation and test scoring, once per run
+# Time on each GPU as a multiple of the L4's. T4: 12.8 min per budget epoch was
+# measured on Kaggle against 8.6 on the L4. A100 is a guess (see GPU_SPEED_CASES).
+GPU_TIME_VS_L4: Dict[str, float] = {"L4": 1.0, "T4": 1.5, "A100": 0.6}
+# Not measured yet: PNA has more parameters per layer than GIN. Replace with the
+# first PNA run's real time (the notebook prints it).
+ASSUMED_PNA_TIME_VS_GIN = 1.5
+# Rule 6 of AGENTS.md: ask the owner before a run longer than this many GPU hours.
+APPROVAL_GPU_HOURS = 3.0

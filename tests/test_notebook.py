@@ -120,14 +120,31 @@ def test_colab_reads_kaggle_json_from_drive_and_never_prints_it() -> None:
     assert "chmod 600" in text
 
 
-def test_colab_pilot_skips_finished_runs_and_moves_dead_attempts_aside() -> None:
+def test_colab_hands_every_run_set_to_the_resumable_runner() -> None:
     text = whole(COLAB)
-    assert "record_exists(item, RUN_RECORDS_DIR)" in text
-    assert "set_aside_partial_run" in text and "run_timed(" in text
+    assert "src.run_phase" in text and "--set {RUN_SET}" in text
+    assert "--gpu-name" in text and "--home {DRIVE}" in text
 
 
-def test_colab_has_a_run_full_switch_that_defaults_to_the_smoke_test() -> None:
-    assert "RUN_FULL = False" in whole(COLAB)
+def test_colab_run_set_defaults_to_the_smoke_test_and_names_every_phase() -> None:
+    first = code_cells(COLAB)[0]
+    assert 'RUN_SET = "smoke"' in first
+    for name in ("pilot", "phaseA", "phaseB", "phaseC", "phaseD"):
+        assert '"%s"' % name in first
+
+
+def test_colab_long_runs_need_an_explicit_switch_that_defaults_to_off() -> None:
+    text = whole(COLAB)
+    assert "ALLOW_LONG_RUNS = False" in text and "--allow-long" in text
+
+
+def test_colab_phase_d_seeds_can_be_chosen_in_the_notebook() -> None:
+    assert "D_SEEDS = None" in whole(COLAB) and "--seeds" in whole(COLAB)
+
+
+def test_colab_keeps_no_secrets_in_the_notebook() -> None:
+    text = COLAB.read_text().lower()
+    assert '"username"' not in text and '"key"' not in text
 
 
 def test_the_colab_smoke_covers_source_then_scratch_then_finetune() -> None:

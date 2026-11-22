@@ -109,17 +109,24 @@ def build_experiment_record(
     scoring_resumed: bool = False,
     training_seconds: float = 0.0,
     training_settings: Optional[Dict[str, float]] = None,
+    extras: Optional[Dict[str, Any]] = None,
 ) -> RunRecord:
     """Combine plan, scores and training facts into one record.
 
     `scoring_resumed` is True when training finished in an earlier session and
     this one only scored it; the runtime then adds the saved training time.
+    `extras` (such as the validation curve) is added to the config as it is.
+    The "validation" metrics are the validation period at the same threshold
+    that was chosen on it, so they are the best validation F1, never a test number.
     """
     config = build_config(
         plan, summary, runtime_seconds, environment, smoke_test,
         scoring_resumed, training_seconds, training_settings,
     )  # fmt: skip
+    config.update(extras or {})
     metrics = {"scored": result.metrics.to_dict()}
+    if result.validation_metrics is not None:
+        metrics["validation"] = result.validation_metrics.to_dict()
     return make_record(plan, config, metrics, result.best_epoch, runtime_seconds)
 
 
@@ -131,12 +138,14 @@ def build_no_improvement_record(
     smoke_test: bool,
     scoring_resumed: bool = False,
     training_settings: Optional[Dict[str, float]] = None,
+    extras: Optional[Dict[str, Any]] = None,
 ) -> RunRecord:
     """The record for a run whose training saved no checkpoint (see module note)."""
     config = build_config(
         plan, summary, runtime_seconds, environment, smoke_test,
         scoring_resumed, runtime_seconds, training_settings,
     )  # fmt: skip
+    config.update(extras or {})
     config["status"] = STATUS_NO_IMPROVEMENT
     config["status_reason"] = (
         "No epoch after the first had validation F1 above 0, so no checkpoint was "

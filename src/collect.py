@@ -1,8 +1,9 @@
-"""Turn pilot run records into one results table (markdown and CSV).
+"""Turn run records into results/summary.csv and a README table.
 
-Reads every `results/pilot/*.json` record (never `superseded/`, never smoke
-runs) and prints one row per system and label share. Numbers come only from
-the records. A `no_improvement` run is shown as 0.0 F1 with a note, never dropped.
+Reads every record under `results/pilot/records/` and
+`results/phases/<set>/records/` (never `superseded/` folders, never smoke runs)
+and writes one row per run. Numbers come only from the records. A
+`no_improvement` run keeps its row, with F1 0.0 and the other metrics empty.
 
 Run: python -m src.collect
 """
@@ -10,128 +11,211 @@ Run: python -m src.collect
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+import statistics
+from dataclasses import astuple, dataclass, fields
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from src.config import PILOT_RECORDS_DIR, RESULTS_DIR
+from src.config import (
+    ALERT_BUDGETS,
+    PILOT_RECORDS_DIR,
+    RESULTS_DIR,
+)
 from src.records import RunRecord, read_all_records
 
 SYSTEM_NAMES = {
     "scratch": "Trained from scratch",
     "finetune": "Pre-trained on HI-Small, then fine-tuned",
-    "source": "Trained on HI-Small (source model, HI-Small test)",
+    "zero_shot": "Trained on HI-Small only (zero-shot)",
+    "source": "Trained on HI-Small (scored on HI-Small test)",
 }
-COMPARISON_MODES = ("scratch", "finetune")
-TABLE_COLUMNS = (
-    "System", "Labels", "Seeds", "Minority F1", "Precision", "Recall",
-    "PR-AUC", "Precision@100", "Alerts", "Note",
-)  # fmt: skip
-EMPTY = "n/a"  # a metric that was not scored (no_improvement runs)
+ARM_ORDER = {"source": 0, "zero_shot": 1, "scratch": 2, "finetune": 3}
+SUMMARY_NAME = "summary.csv"
+PILOT_TABLE_NAME = "pilot_table.md"
 
 
 @dataclass(frozen=True)
-class ResultRow:
-    """One run's headline numbers, in the units the tables show."""
+class SummaryRow:
+    """One run's headline numbers. F1, precision and recall are fractions of 1."""
 
-    mode: str
+    run_id: str
+    run_set: str
+    model: str
+    arm: str  # scratch, finetune, zero_shot or source
     fraction: float
     seed: int
+    budget: Optional[int]  # step budget in epochs at 100% labels; None for zero-shot
+    steps: Optional[int]  # gradient steps actually taken
+    epochs: Optional[int]  # epochs trained (more at small fractions: equal steps)
+    best_epoch: Optional[int]  # 1-based; -1 when no checkpoint was saved
     status: str
-    minority_f1: float
-    precision: float
-    recall: float
-    pr_auc: Optional[float]
-    precision_at_100: Optional[float]
-    alerts: Optional[int]
+    val_minority_f1: Optional[float]
+    test_minority_f1: float
+    test_pr_auc: Optional[float]
+    test_precision_at_100: Optional[float]
+    test_recall_at_10k: Optional[float]
+    test_recall_at_25k: Optional[float]
+    test_recall_at_50k: Optional[float]
+
+
+def record_folders(
+    results_dir: Path = RESULTS_DIR,
+) -> List[Tuple[str, Path]]:
+    """(run set, records folder) for the pilot and for each phase folder present."""
+    folders = [("pilot", results_dir / "pilot" / "records")]
+    phases = results_dir / "phases"
+    if phases.exists():
+        folders += [(path.name, path / "records") for path in sorted(phases.iterdir())]
+    return [(name, path) for name, path in folders if path.exists()]
 
 
 def load_records(records_dir: Path = PILOT_RECORDS_DIR) -> List[RunRecord]:
-    """Real runs only: smoke tests are left out (superseded ones are in a subfolder)."""
+    """Real runs only. `read_all_records` ignores subfolders, so superseded stay out."""
     records = read_all_records(records_dir)
     return [record for record in records if not record.config.get("smoke_test")]
 
 
-def to_row(record: RunRecord) -> ResultRow:
-    """Pull the scored numbers out of one record."""
+def optional_metric(scored: Dict, name: str) -> Optional[float]:
+    """A scored metric, or None when the run was not scored."""
+    return scored.get(name)
+
+
+def summary_row(record: RunRecord, run_set: str) -> SummaryRow:
+    """Pull one record's numbers into a flat row."""
     scored = record.metrics["scored"]
-    return ResultRow(
-        record.mode, record.fraction, record.seed,
+    validation = record.metrics.get("validation") or {}
+    budgets = scored.get("recall_at_alert_budget") or {}
+    recalls = [budgets.get(str(budget)) for budget in ALERT_BUDGETS]
+    zero_shot = record.mode == "zero_shot"
+    return SummaryRow(
+        record.run_id, run_set, record.model, record.mode, record.fraction,
+        record.seed,
+        None if zero_shot else record.config.get("step_budget_epochs"),
+        record.config.get("gradient_steps"),
+        None if zero_shot else record.epochs_trained,
+        None if zero_shot else record.best_epoch,
         record.config.get("status", "completed"),
-        scored["minority_f1"], scored["precision"], scored["recall"],
-        scored["pr_auc"], scored["precision_at_100"], scored["alerts"],
+        validation.get("minority_f1"), scored["minority_f1"],
+        optional_metric(scored, "pr_auc"),
+        optional_metric(scored, "precision_at_100"), *recalls,
     )  # fmt: skip
 
 
-def result_rows(records: List[RunRecord], model: str = "gin") -> List[ResultRow]:
-    """Rows for one model: source first, then each fraction ascending, scratch first."""
-    rows = [to_row(record) for record in records if record.model == model]
-    order = {"source": 0, "scratch": 1, "finetune": 2}
-    rows = [row for row in rows if row.mode in order]
-    return sorted(rows, key=lambda row: (row.mode != "source", row.fraction,
-                                         order[row.mode], row.seed))  # fmt: skip
+def summary_rows(folders: List[Tuple[str, Path]]) -> List[SummaryRow]:
+    """All rows, ordered by set, model, arm, fraction and seed."""
+    rows = [
+        summary_row(record, run_set)
+        for run_set, folder in folders
+        for record in load_records(folder)
+    ]
+    return sorted(
+        rows,
+        key=lambda r: (r.run_set, r.model, ARM_ORDER[r.arm], r.fraction, r.seed),
+    )
 
 
-def percent(value: float) -> str:
-    """0.2284 -> '22.8%'."""
-    return "%.1f%%" % (100 * value)
+def write_summary(rows: List[SummaryRow], path: Path) -> None:
+    """Write the CSV. Missing values are left empty, not written as 'None'."""
+    with open(path, "w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow([field.name for field in fields(SummaryRow)])
+        for row in rows:
+            writer.writerow(["" if value is None else value for value in astuple(row)])
 
 
-def optional(value: Optional[float], text: str) -> str:
-    """Format a metric that may be missing."""
-    return EMPTY if value is None else text % value
+@dataclass(frozen=True)
+class Stat:
+    """One point on a chart: mean over seeds, spread, and how many seeds."""
+
+    fraction: float
+    mean: float
+    std: float  # sample standard deviation; 0.0 with one seed (no spread exists)
+    count: int
 
 
-def table_line(row: ResultRow) -> Tuple[str, ...]:
-    """The cells of one table row."""
-    note = "no checkpoint: training never beat F1 0" if (
-        row.status == "no_improvement") else ""  # fmt: skip
-    return (
-        SYSTEM_NAMES[row.mode], "%.0f%%" % (100 * row.fraction), str(row.seed),
-        percent(row.minority_f1), percent(row.precision), percent(row.recall),
-        optional(row.pr_auc, "%.3f"), optional(row.precision_at_100, "%.2f"),
-        optional(row.alerts, "%d"), note,
-    )  # fmt: skip
+def spread(values: List[float]) -> float:
+    """Sample standard deviation, or 0.0 when there is only one value."""
+    return statistics.stdev(values) if len(values) > 1 else 0.0
 
 
-def markdown_table(rows: List[ResultRow]) -> str:
-    """GitHub markdown table in the DESIGN_SYSTEM column order."""
-    lines = ["| " + " | ".join(TABLE_COLUMNS) + " |"]
-    lines.append("| " + " | ".join("---" for _ in TABLE_COLUMNS) + " |")
+def stats_by_fraction(
+    rows: List[SummaryRow], model: str, arm: str, metric: str
+) -> List[Stat]:
+    """Mean and spread over seeds at each label share, for one model and arm."""
+    groups: Dict[float, List[float]] = {}
     for row in rows:
-        lines.append("| " + " | ".join(table_line(row)) + " |")
+        value = getattr(row, metric)
+        if row.model == model and row.arm == arm and value is not None:
+            groups.setdefault(row.fraction, []).append(value)
+    return [
+        Stat(fraction, statistics.mean(values), spread(values), len(values))
+        for fraction, values in sorted(groups.items())
+    ]
+
+
+def cell(values: List[Optional[float]], percent: bool) -> str:
+    """'22.8%' for one value, '22.8 ± 1.1' (percent points) for several."""
+    known = [value for value in values if value is not None]
+    if not known:
+        return "n/a"
+    scale = 100 if percent else 1
+    pattern = "%.1f" if percent else "%.3f"
+    text = pattern % (scale * statistics.mean(known))
+    if len(known) > 1:
+        text += " ± " + pattern % (scale * spread(known))
+    return text + ("%" if percent and len(known) == 1 else "")
+
+
+def table_columns() -> List[Tuple[str, str, bool]]:
+    """(heading, row attribute, is a percentage) in DESIGN_SYSTEM.md order."""
+    return [
+        ("Minority F1", "test_minority_f1", True),
+        ("PR-AUC", "test_pr_auc", False),
+        ("Precision@100", "test_precision_at_100", True),
+        ("Recall@25k", "test_recall_at_25k", True),
+    ]
+
+
+def markdown_table(rows: List[SummaryRow], model: str) -> str:
+    """Test results of one model: a row per setup and label share, seeds averaged."""
+    columns = table_columns()
+    head = ["System", "Labels", "Seeds", "Epochs (best/run)"] + [c[0] for c in columns]
+    lines = [
+        "| " + " | ".join(head) + " |",
+        "| " + " | ".join("---" for _ in head) + " |",
+    ]
+    groups: Dict[Tuple[str, float], List[SummaryRow]] = {}
+    for row in rows:
+        if row.model == model:
+            groups.setdefault((row.arm, row.fraction), []).append(row)
+    for (arm, fraction), group in sorted(
+        groups.items(), key=lambda g: (g[0][1], ARM_ORDER[g[0][0]])
+    ):
+        epochs = ", ".join("%s/%s" % (r.best_epoch, r.epochs) for r in group)
+        cells = [
+            SYSTEM_NAMES[arm],
+            "%.0f%%" % (100 * fraction),
+            str(len(group)),
+            epochs,
+        ]
+        cells += [
+            cell([getattr(r, attr) for r in group], pct) for _, attr, pct in columns
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
 
-def gaps_by_fraction(rows: List[ResultRow]) -> Dict[float, float]:
-    """Finetune minus scratch minority F1 (fraction of 1) per label share."""
-    by_key = {(row.mode, row.fraction, row.seed): row for row in rows}
-    gaps: Dict[float, float] = {}
-    for (mode, fraction, seed), row in by_key.items():
-        other = by_key.get(("scratch", fraction, seed))
-        if mode == "finetune" and other is not None:
-            gaps[fraction] = row.minority_f1 - other.minority_f1
-    return dict(sorted(gaps.items()))
-
-
-def write_csv(rows: List[ResultRow], path: Path) -> None:
-    """The same table as CSV, for the chart and for readers."""
-    with open(path, "w", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(TABLE_COLUMNS)
-        for row in rows:
-            writer.writerow(table_line(row))
-
-
 def main() -> None:
-    """Write results/pilot_table.md and .csv from the pilot records."""
-    rows = result_rows(load_records())
+    """Write results/summary.csv, and the pilot table for the README."""
+    rows = summary_rows(record_folders())
     if not rows:
-        raise SystemExit("No pilot records in %s" % PILOT_RECORDS_DIR)
-    RESULTS_DIR.mkdir(exist_ok=True)
-    (RESULTS_DIR / "pilot_table.md").write_text(markdown_table(rows) + "\n")
-    write_csv(rows, RESULTS_DIR / "pilot_table.csv")
-    print(markdown_table(rows))
+        raise SystemExit("No run records found under %s" % RESULTS_DIR)
+    write_summary(rows, RESULTS_DIR / SUMMARY_NAME)
+    pilot = [row for row in rows if row.run_set == "pilot"]
+    if pilot:
+        table = markdown_table(pilot, "gin") + "\n"
+        (RESULTS_DIR / "pilot" / PILOT_TABLE_NAME).write_text(table)
+    print("Wrote %d rows to %s" % (len(rows), RESULTS_DIR / SUMMARY_NAME))
 
 
 if __name__ == "__main__":

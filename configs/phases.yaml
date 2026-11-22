@@ -1,0 +1,91 @@
+# The run sets the Colab notebook can run (RUN_SET in notebooks/colab_runner.ipynb).
+#
+# A value starting with "$" is the name of a constant in src/config.py, where the
+# reason for each number is written (for example "$BUDGET_C"). Any other value is
+# used as written. Folders are inside the project folder on Google Drive.
+#
+# Fields:
+#   model           gin or pna (the "+ EU" flags are added by src/config.py)
+#   source_epochs   epochs to train the HI-Small source model first; null = no source run
+#   zero_shot       true = also score the source model on LI-Small test, no training
+#   arms            scratch and/or finetune, run at every fraction and seed
+#   fractions/seeds the label shares and seeds of the grid
+#   budget          step budget in epochs at 100% labels (null here = not set yet)
+#   suffix_budget   true = add "_b<budget>" to run ids, so they never meet the pilot's
+#   source_seed     which source model finetune and zero_shot start from
+#   *_folder        where records and models live; source_folder holds the source model
+
+pilot:
+  description: "GIN pilot: one source model, 10/25/100% labels, scratch vs finetune"
+  model: gin
+  source_epochs: $PILOT_SOURCE_EPOCHS
+  zero_shot: false
+  arms: [scratch, finetune]
+  fractions: $PILOT_FRACTIONS
+  seeds: $PILOT_SEEDS
+  budget: $PILOT_STEP_BUDGET_EPOCHS
+  suffix_budget: false
+  source_seed: $PILOT_SOURCE_SEED
+  records_folder: pilot/records
+  models_folder: pilot/models
+  source_folder: pilot/models
+
+phaseB:
+  description: "Zero-shot: the pilot's GIN source model scored on LI-Small test, no training"
+  model: gin
+  source_epochs: null
+  zero_shot: true
+  arms: []
+  fractions: [1.0]
+  seeds: [0]
+  budget: null
+  suffix_budget: false
+  source_seed: $PILOT_SOURCE_SEED
+  records_folder: phaseB/records
+  models_folder: phaseB/models
+  source_folder: pilot/models
+
+phaseA:
+  description: "GIN at 100% labels, 20-epoch budget, scratch and finetune, every epoch validated"
+  model: gin
+  source_epochs: null
+  zero_shot: false
+  arms: [scratch, finetune]
+  fractions: [1.0]
+  seeds: [0]
+  budget: $PHASE_A_BUDGET
+  suffix_budget: true
+  source_seed: $PILOT_SOURCE_SEED
+  records_folder: phaseA/records
+  models_folder: phaseA/models
+  source_folder: pilot/models
+
+phaseC:
+  description: "GIN label-scarcity grid: 4 fractions x scratch/finetune x 3 seeds"
+  model: gin
+  source_epochs: null
+  zero_shot: false
+  arms: [scratch, finetune]
+  fractions: $LABEL_FRACTIONS
+  seeds: $SEEDS
+  budget: $BUDGET_C
+  suffix_budget: false
+  source_seed: $PILOT_SOURCE_SEED
+  records_folder: phaseC/records
+  models_folder: phaseC/models
+  source_folder: pilot/models
+
+phaseD:
+  description: "PNA: train the HI-Small source model, then the same grid as phase C"
+  model: pna
+  source_epochs: $PHASE_D_SOURCE_EPOCHS
+  zero_shot: false
+  arms: [scratch, finetune]
+  fractions: $LABEL_FRACTIONS
+  seeds: $PHASE_D_SEEDS
+  budget: $BUDGET_C
+  suffix_budget: false
+  source_seed: 0
+  records_folder: phaseD/records
+  models_folder: phaseD/models
+  source_folder: phaseD/models

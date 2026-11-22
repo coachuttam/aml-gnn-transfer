@@ -9,6 +9,7 @@ __pycache__/
 data/
 *.csv
 !results/*.csv
+!results/**/*.csv
 
 # Trained GNN weights are large; publish them separately if needed.
 models/

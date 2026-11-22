@@ -150,7 +150,10 @@ run(f"grep -E 'Validation F1|Test F1' {WORK}/data/multignn_runs/{STOCK_RUN_ID}/l
 
 
 COLAB_SETUP = r"""
-RUN_FULL = False  # False = smoke test only; True = the pilot (about 11 T4-hours: see the estimate cell)
+RUN_SET = "smoke"  # "smoke" | "pilot" | "phaseA" | "phaseB" | "phaseC" | "phaseD"
+D_SEEDS = None  # phaseD only, e.g. [0, 1, 2]; None = PHASE_D_SEEDS in src/config.py
+ALLOW_LONG_RUNS = False  # True only after the owner approved a run over 3 GPU hours
+assert RUN_SET in ("smoke", "pilot", "phaseA", "phaseB", "phaseC", "phaseD"), RUN_SET
 WORK = "/content"
 REPO = f"{WORK}/repo"
 
@@ -160,15 +163,15 @@ DRIVE = "/content/drive/MyDrive/aml-gnn-transfer"  # kaggle.json lives here; eve
 os.makedirs(DRIVE, exist_ok=True)
 
 # Data, prepared graphs, models and records all live on Drive, so a disconnect loses nothing.
-# The pilot's records and models are kept apart from the full design's (and from smoke runs').
-SMOKE_STAMP = time.strftime("%Y%m%d-%H%M%S")
-RESULTS_HOME = f"{DRIVE}/pilot" if RUN_FULL else f"{DRIVE}/smoke/{SMOKE_STAMP}"
+# Each run set keeps its own records and models (configs/phases.yaml); src.run_phase sets those folders.
 os.environ["AML_DATA_ROOT"] = f"{DRIVE}/data"
 os.environ["AML_GRAPH_CACHE"] = f"{DRIVE}/graph_cache"
-os.environ["AML_MODEL_ROOT"] = f"{RESULTS_HOME}/models"
-os.environ["AML_RUN_RECORDS_DIR"] = f"{RESULTS_HOME}/records"
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
-print("Records and models go to:", RESULTS_HOME)
+if RUN_SET == "smoke":  # smoke runs go to a throw-away folder
+    SMOKE_HOME = f"{DRIVE}/smoke/{time.strftime('%Y%m%d-%H%M%S')}"
+    os.environ["AML_MODEL_ROOT"] = f"{SMOKE_HOME}/models"
+    os.environ["AML_RUN_RECORDS_DIR"] = f"{SMOKE_HOME}/records"
+print("Run set:", RUN_SET)
 """
 
 COLAB_DOWNLOAD = r"""
@@ -183,40 +186,25 @@ run(f"{sys.executable} -m src.download_data")  # skips files already on Drive
 run(f"{PYTHON} -m src.prepare --run-id prepare_only")  # IBM's formatter, skipped if already formatted
 """
 
-COLAB_PILOT = r"""
-from src.config import MODEL_ROOT, RUN_RECORDS_DIR
-from src.pilot import (
-    pilot_runs, record_exists, set_aside_partial_run, supersede_other_budget_records,
-)
-
-run(f"{sys.executable} -m src.estimate_pilot")
-runs = pilot_runs()
-# Records made at another step budget are kept in records/superseded/ and the run is redone.
-for old in supersede_other_budget_records(runs, RUN_RECORDS_DIR):
-    print("Superseded (different step budget):", old)
-finished = sum(record_exists(item, RUN_RECORDS_DIR) for item in runs)
-print(f"\n{finished} of {len(runs)} pilot runs already have a record; those are skipped.")
-
-for number, item in enumerate(runs, start=1):
-    if record_exists(item, RUN_RECORDS_DIR):
-        print(f"[{number}/{len(runs)}] {item.run_id}: record exists, skipping")
-        continue
-    moved = set_aside_partial_run(item, MODEL_ROOT)  # a dead attempt's files, kept
-    if moved:
-        print(f"[{number}/{len(runs)}] earlier attempt of {item.run_id} moved to {moved}")
-    words = " ".join(item.command_words())
-    run_timed(
-        f"{number}/{len(runs)} {item.run_id}",
-        f"{PYTHON} -m src.run_experiment {words} --environment {shlex.quote(ENVIRONMENT_LABEL)}",
-    )
+COLAB_PHASE = r"""
+seeds = " ".join(str(seed) for seed in D_SEEDS) if (RUN_SET == "phaseD" and D_SEEDS) else ""
+words = [
+    f"--set {RUN_SET}", f"--home {DRIVE}", f"--python {shlex.quote(PYTHON)}",
+    f"--gpu-name {shlex.quote(GPU_NAME)}", f"--environment {shlex.quote(ENVIRONMENT_LABEL)}",
+]
+if seeds:
+    words.append(f"--seeds {seeds}")
+if ALLOW_LONG_RUNS:
+    words.append("--allow-long")
+run(f"{sys.executable} -m src.run_phase " + " ".join(words))
 """
 
 
 def colab_cells() -> List[Dict[str, Any]]:
-    """The Colab runner: smoke test now, the pilot when RUN_FULL is on."""
+    """The Colab runner: pick RUN_SET in the first cell; "smoke" is the safe default."""
     return [
         markdown("""
-# Colab runner: smoke test, then the pilot
+# Colab runner: smoke test, pilot and Phases A to D
 
 Before running: **Runtime > Change runtime type > GPU** (L4 or A100 if you have them; T4 works),
 and put your Kaggle token as `aml-gnn-transfer/kaggle.json` in your Google Drive.
@@ -226,11 +214,20 @@ finished runs have records on Drive and are skipped, an interrupted run's files 
 
 Every step stops the notebook if it fails. This file is written by `python -m tools.make_notebooks`.
 
-`RUN_FULL = False` (default) runs the smoke test: source, then 10% scratch, then 10% fine-tune,
-each capped at 2 epochs, then checks that scratch and finetune used the same labels and steps.
-`RUN_FULL = True` runs the **pilot** (GIN only, one HI-Small source model, fractions 10/25/100%,
-seeds 0 and 1, 3-epoch step budget). Turn it on only after the owner has approved the estimate
-printed below (AGENTS.md rule 6).
+Pick `RUN_SET` in the first cell:
+
+| RUN_SET | What it runs |
+| --- | --- |
+| `smoke` (default) | source, then 10% scratch, then 10% fine-tune, each capped at 2 epochs; checks the pair used the same labels and steps |
+| `pilot` | GIN pilot: one source model, 10/25/100% labels, scratch vs fine-tune |
+| `phaseB` | zero-shot: the pilot's GIN source model scored on LI-Small test, no training |
+| `phaseA` | GIN at 100% labels, 20-epoch budget, scratch and fine-tune (ids end `_b20`) |
+| `phaseC` | GIN grid: 4 fractions x 2 setups x 3 seeds; needs `BUDGET_C` in `src/config.py` |
+| `phaseD` | PNA: trains its HI-Small source model, then the same grid; needs `BUDGET_C` |
+
+Each run prints an estimate before it starts, then its real minutes and Colab units with a running total.
+A run expected to pass 3 GPU hours stops unless `ALLOW_LONG_RUNS = True` (AGENTS.md rule 6: ask the owner first).
+Phases A to D start from the pilot's source model on Drive, so run the pilot's source run first.
 """),
         code(RUN_HELPER + COLAB_SETUP + GPU_GATE),
         code(CLONE_REPO),
@@ -241,37 +238,42 @@ printed below (AGENTS.md rule 6).
         ),
         code(COLAB_DOWNLOAD),
         markdown(
-            "The runs. The first run of each dataset builds its prepared graph (several minutes of CPU, GPU idle) and saves it to Drive; every later train and score step loads it."
+            'Smoke test (only when `RUN_SET = "smoke"`). The first run of each dataset builds its prepared graph (several minutes of CPU, GPU idle) and saves it to Drive.'
         ),
         code(
             SMOKE_CHAIN
             + r"""
-if RUN_FULL:
-    print("RUN_FULL is on: skipping the smoke runs")
+if RUN_SET != "smoke":
+    print(f"RUN_SET is {RUN_SET}: skipping the smoke runs")
 else:
     smoke_chain(PYTHON, ENVIRONMENT_LABEL, 0, 1, 0.10)
     run(f"{sys.executable} -m src.check_smoke")
 """
         ),
         markdown(
-            "The pilot (only when `RUN_FULL` is on). Prints the estimate first, then one timed line per run."
+            "The chosen run set (anything but `smoke`). Prints the estimate first, then one estimate and one timed line per run, with units."
         ),
         code(
             r"""
-if not RUN_FULL:
-    print("RUN_FULL is off: no pilot runs")
+if RUN_SET == "smoke":
+    print("RUN_SET is smoke: no phase runs")
 else:
 """
             + "\n".join(
                 "    " + line if line else line
-                for line in COLAB_PILOT.strip().splitlines()
+                for line in COLAB_PHASE.strip().splitlines()
             )
         ),
         markdown(
-            "What the records say (our scored values). Copy the records folder into the repo's `results/pilot/` and commit."
+            "What the records say. Copy that records folder into the repo (`results/pilot/records/` for the pilot, `results/phases/<set>/records/` for a phase) and run `python -m src.collect`."
         ),
         code(r"""
-run(f"grep -H -E '\"(minority_f1|epochs_requested|gradient_steps|labels_kept|kept_labels_fingerprint)\"' {os.environ['AML_RUN_RECORDS_DIR']}/*.json || true")
+if RUN_SET != "smoke":
+    from pathlib import Path
+    from src.phases import phase_folders
+    records_dir = phase_folders(RUN_SET, Path(DRIVE)).records
+    print("Records are in:", records_dir)
+    run(f"grep -H -E '\"(status|minority_f1|epochs_requested|gradient_steps|kept_labels_fingerprint)\"' {records_dir}/*.json || true")
 """),
     ]
 
