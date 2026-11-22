@@ -19,7 +19,6 @@ from typing import Dict, List, Optional, Tuple
 from src import config
 from src.config import (
     ALERT_BUDGETS,
-    LABEL_FRACTIONS,
     PILOT_RECORDS_DIR,
     RESULTS_DIR,
 )
@@ -103,23 +102,34 @@ def summary_row(record: RunRecord, run_set: str) -> SummaryRow:
     )  # fmt: skip
 
 
-def reused_pilot_rows(folders: List[Tuple[str, Path]], have: set) -> List[SummaryRow]:
-    """Pilot scratch/finetune runs that Phase C reuses (same budget, grid fractions).
+REUSED_BY_PHASE_C = ("pilot", "phaseA")  # same list as reuse_from in phases.yaml
 
-    Matches src/run_phase.py: a pilot record counts for phaseC only when its step
-    budget equals BUDGET_C. Runs phaseC has its own record for are not repeated.
+
+def grid_key(record: RunRecord) -> tuple:
+    """What makes a run the same cell of the grid, whatever its run id ends with."""
+    return (record.model, record.mode, record.fraction, record.seed)
+
+
+def reused_rows(folders: List[Tuple[str, Path]], have: set) -> List[SummaryRow]:
+    """Pilot and Phase A runs that Phase C reuses (same budget, in the grid).
+
+    Matches src/run_phase.py: a record counts for phaseC only when its step
+    budget equals BUDGET_C. Cells phaseC has its own record for are not repeated.
     """
-    pilot = dict(folders).get("pilot")
-    if pilot is None or config.BUDGET_C is None or "phaseC" not in dict(folders):
+    named = dict(folders)
+    if config.BUDGET_C is None or "phaseC" not in named:
         return []
     rows = []
-    for record in load_records(pilot):
-        reusable = (
-            record.mode in ("scratch", "finetune")
-            and record.fraction in LABEL_FRACTIONS
-        )
-        if reusable and record.config.get("step_budget_epochs") == config.BUDGET_C:
-            if record.run_id not in have:
+    for source in REUSED_BY_PHASE_C:
+        for record in load_records(named[source]) if source in named else []:
+            in_grid = (
+                record.mode in ("scratch", "finetune")
+                and record.fraction in config.PHASE_C_FRACTIONS
+                and record.seed in config.PHASE_C_SEEDS
+            )
+            same_budget = record.config.get("step_budget_epochs") == config.BUDGET_C
+            if in_grid and same_budget and grid_key(record) not in have:
+                have.add(grid_key(record))
                 rows.append(summary_row(record, "phaseC"))
     return rows
 
@@ -131,8 +141,8 @@ def summary_rows(folders: List[Tuple[str, Path]]) -> List[SummaryRow]:
         for run_set, folder in folders
         for record in load_records(folder)
     ]
-    own = {row.run_id for row in rows if row.run_set == "phaseC"}
-    rows += reused_pilot_rows(folders, own)
+    own = {(r.model, r.arm, r.fraction, r.seed) for r in rows if r.run_set == "phaseC"}
+    rows += reused_rows(folders, own)
     return sorted(
         rows,
         key=lambda r: (r.run_set, r.model, ARM_ORDER[r.arm], r.fraction, r.seed),

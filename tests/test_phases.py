@@ -56,7 +56,9 @@ def test_the_pilot_list_is_the_same_as_the_original_pilot_list() -> None:
 def test_run_counts_per_phase() -> None:
     assert len(phase_runs("phaseB")) == 1
     assert len(phase_runs("phaseA")) == 2
-    assert len(phase_runs("phaseC", budget=EXAMPLE_BUDGET)) == 24  # 4 x 2 x 3
+    assert (
+        len(phase_runs("phaseC", budget=EXAMPLE_BUDGET)) == 12
+    )  # 3 fractions x 2 arms x 2 seeds
     assert len(phase_runs("phaseD", budget=EXAMPLE_BUDGET)) == 1 + 8  # source + 4 x 2
     assert len(phase_runs("phaseD", seeds=[0, 1, 2], budget=EXAMPLE_BUDGET)) == 25
 
@@ -64,9 +66,9 @@ def test_run_counts_per_phase() -> None:
 def test_phase_c_covers_every_fraction_arm_and_seed_once() -> None:
     runs = phase_runs("phaseC", budget=EXAMPLE_BUDGET)
     keys = {(r.fraction, r.mode, r.seed) for r in runs}
-    assert len(keys) == 24 and len(set(ids(runs))) == 24
-    assert {r.fraction for r in runs} == set(config.LABEL_FRACTIONS)
-    assert {r.seed for r in runs} == set(config.SEEDS)
+    assert len(keys) == 12 and len(set(ids(runs))) == 12
+    assert {r.fraction for r in runs} == set(config.PHASE_C_FRACTIONS)
+    assert {r.seed for r in runs} == set(config.PHASE_C_SEEDS)
 
 
 def test_phase_c_and_d_refuse_to_start_while_the_budget_is_not_set(monkeypatch) -> None:

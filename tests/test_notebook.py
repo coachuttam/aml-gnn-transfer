@@ -149,3 +149,11 @@ def test_colab_keeps_no_secrets_in_the_notebook() -> None:
 
 def test_the_colab_smoke_covers_source_then_scratch_then_finetune() -> None:
     assert 'for mode in ("source", "scratch", "finetune")' in whole(COLAB)
+
+
+def test_colab_export_curves_set_needs_no_gpu_and_runs_the_exporter() -> None:
+    text = whole(COLAB)
+    assert '"export_curves"' in code_cells(COLAB)[0]
+    assert 'NEEDS_GPU = RUN_SET != "export_curves"' in text
+    assert "src.export_curves --home {DRIVE} --sets pilot phaseA" in text
+    assert "if NEEDS_GPU:" in code_cells(COLAB)[0]  # the nvidia-smi gate is skipped

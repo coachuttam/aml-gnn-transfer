@@ -6,6 +6,11 @@ logs live on Drive, so run it on Colab or copy the logs down first:
 
     python -m src.export_curves --logs-root <data root>/multignn_runs \
         --records-dir results/pilot/records --out results/pilot/curves
+
+On Colab (no GPU needed) the notebook's RUN_SET = "export_curves" does this for
+whole run sets, writing `<home>/<set>/curves/` next to `<home>/<set>/records/`:
+
+    python -m src.export_curves --home <Drive project folder> --sets pilot phaseA
 """
 
 from __future__ import annotations
@@ -15,6 +20,8 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
+from src.config import RUN_FOLDERS_NAME
+from src.phases import phase_folders
 from src.read_log import read_validation_curve
 from src.records import read_all_records
 
@@ -34,15 +41,33 @@ def export_curves(logs_root: Path, records_dir: Path, output_dir: Path) -> List[
     return written
 
 
+def export_sets(home: Path, set_names: List[str]) -> List[Path]:
+    """Curves for each run set, from the logs in `<home>/data/multignn_runs`."""
+    logs_root = home / "data" / RUN_FOLDERS_NAME
+    written: List[Path] = []
+    for name in set_names:
+        records = phase_folders(name, home).records
+        print("%s: records in %s" % (name, records))
+        written += export_curves(logs_root, records, records.parent / "curves")
+    return written
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     """Command line."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--logs-root", type=Path, required=True)
-    parser.add_argument("--records-dir", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--logs-root", type=Path)
+    parser.add_argument("--records-dir", type=Path)
+    parser.add_argument("--out", type=Path)
+    parser.add_argument("--home", type=Path, help="Project folder (Drive on Colab)")
+    parser.add_argument("--sets", nargs="+", default=["pilot", "phaseA"])
     arguments = parser.parse_args(argv)
-    files = export_curves(arguments.logs_root, arguments.records_dir, arguments.out)
-    print("Wrote %d curve files to %s" % (len(files), arguments.out))
+    if arguments.home:
+        files = export_sets(arguments.home, arguments.sets)
+    elif arguments.logs_root and arguments.records_dir and arguments.out:
+        files = export_curves(arguments.logs_root, arguments.records_dir, arguments.out)
+    else:
+        parser.error("give --home, or all of --logs-root, --records-dir and --out")
+    print("Wrote %d curve files" % len(files))
 
 
 if __name__ == "__main__":

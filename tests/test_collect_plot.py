@@ -237,3 +237,60 @@ def test_validation_curves_are_drawn_from_the_record_or_from_an_exported_file(
 def test_no_curves_means_no_file_and_no_crash(tmp_path: Path) -> None:
     write_record(make_record("scratch", 0.1, 0.2), tmp_path / "records")
     assert draw_curves(tmp_path / "records", tmp_path) == []
+
+
+# --- Phase C reuses finished runs from the pilot and Phase A ---
+
+
+def test_phase_c_tables_include_phase_a_runs_when_the_budget_matches(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from src import config
+
+    monkeypatch.setattr(config, "BUDGET_C", 20)
+    write_record(
+        make_record("scratch", 1.0, 0.3, step_budget_epochs=20, run_suffix="_b20"),
+        tmp_path / "phases" / "phaseA" / "records",
+    )
+    write_record(make_record("scratch", 0.1, 0.1), tmp_path / "pilot" / "records")
+    rows = summary_rows(record_folders(tmp_path))
+    assert [(r.run_set, r.fraction) for r in rows if r.run_set == "phaseC"] == []
+    write_record(
+        make_record("scratch", 0.1, 0.2), tmp_path / "phases" / "phaseC" / "records"
+    )
+    rows = summary_rows(record_folders(tmp_path))
+    reused = [r for r in rows if r.run_set == "phaseC"]
+    assert sorted(r.fraction for r in reused) == [0.1, 1.0]  # own 0.1, reused 1.0
+
+
+def test_the_phase_c_table_has_nothing_reused_while_the_budget_is_not_set(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from src import config
+
+    monkeypatch.setattr(config, "BUDGET_C", None)
+    write_record(make_record("scratch", 0.1, 0.1), tmp_path / "pilot" / "records")
+    write_record(
+        make_record("scratch", 0.25, 0.2), tmp_path / "phases" / "phaseC" / "records"
+    )
+    rows = summary_rows(record_folders(tmp_path))
+    assert [r.run_set for r in rows].count("phaseC") == 1
+
+
+# --- export_curves run set ---
+
+
+def test_export_sets_writes_curves_next_to_each_sets_records(tmp_path: Path) -> None:
+    from src.export_curves import export_sets
+
+    record = make_record("scratch", 1.0, 0.3, run_suffix="_b20")
+    record = RunRecord(**{**record.__dict__, "run_id": "gin_scratch_f1.0_s0_b20"})
+    write_record(record, tmp_path / "phaseA" / "records")
+    log = tmp_path / "data" / "multignn_runs" / record.run_id / "logs"
+    log.mkdir(parents=True)
+    (log / "logs.log").write_text(
+        "Retrieving data\nTrain F1: 0.1\nValidation F1: 0.2\nTest F1: not scored\n"
+    )
+    written = export_sets(tmp_path, ["phaseA"])
+    assert written == [tmp_path / "phaseA" / "curves" / (record.run_id + ".json")]
+    assert json.loads(written[0].read_text()) == [[1, 0.2]]

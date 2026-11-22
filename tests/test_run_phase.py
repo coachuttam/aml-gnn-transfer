@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -227,20 +228,55 @@ def test_phase_c_skips_pilot_runs_made_at_the_same_budget(
 ) -> None:
     folders = phase_folders("phaseC", tmp_path)
     for mode in ("scratch", "finetune"):
-        write_record(fake_record(pilot_run(mode, 0.1)), folders.reuse_records)
+        write_record(fake_record(pilot_run(mode, 0.1)), folders.reuse[0].records)
     started: List[str] = []
     monkeypatch.setattr(run_phase, "launch", fake_launcher(started))
     run_phase.run_set(arguments(tmp_path, "phaseC", seeds=[0], budget=8))
-    assert "gin_scratch_f0.1_s0" not in started and len(started) == 6
+    assert "gin_scratch_f0.1_s0" not in started and len(started) == 4
 
 
 def test_a_pilot_record_at_another_budget_is_not_reused(tmp_path: Path) -> None:
     folders = phase_folders("phaseC", tmp_path)
-    write_record(fake_record(pilot_run("scratch", 0.1)), folders.reuse_records)
+    write_record(fake_record(pilot_run("scratch", 0.1)), folders.reuse[0].records)
     other = PhaseRun("gin", "scratch", 0.1, 0, 20, 0)
-    assert run_phase.reused_record_dir(other, folders) is None
-    assert run_phase.reused_record_dir(pilot_run("scratch", 0.1), folders) is not None
+    assert run_phase.reused_record_path(other, folders) is None
+    assert run_phase.reused_record_path(pilot_run("scratch", 0.1), folders) is not None
 
 
 def test_other_sets_never_reuse_anything(tmp_path: Path) -> None:
-    assert phase_folders("phaseA", tmp_path).reuse_records is None
+    assert phase_folders("phaseA", tmp_path).reuse == ()
+
+
+def test_phase_c_reuses_the_pilot_and_phase_a_in_that_order(tmp_path: Path) -> None:
+    folders = phase_folders("phaseC", tmp_path)
+    assert [source.records.parent.name for source in folders.reuse] == [
+        "pilot",
+        "phaseA",
+    ]
+
+
+def phase_a_run(mode: str, budget: int = 20) -> PhaseRun:
+    return PhaseRun("gin", mode, 1.0, 0, budget, 0)
+
+
+def test_phase_c_skips_phase_a_runs_found_under_their_b20_ids(
+    tmp_path: Path, monkeypatch
+) -> None:
+    folders = phase_folders("phaseC", tmp_path)
+    for mode in ("scratch", "finetune"):
+        run = replace(phase_a_run(mode), run_suffix="_b20")  # Phase A names its runs so
+        write_record(fake_record(run), folders.reuse[1].records)
+    started: List[str] = []
+    monkeypatch.setattr(run_phase, "launch", fake_launcher(started))
+    run_phase.run_set(arguments(tmp_path, "phaseC", budget=20))
+    assert len(started) == 10 and "gin_scratch_f1.0_s0" not in started
+
+
+def test_a_phase_a_record_at_another_budget_is_not_reused(tmp_path: Path) -> None:
+    folders = phase_folders("phaseC", tmp_path)
+    write_record(
+        fake_record(replace(phase_a_run("scratch"), run_suffix="_b20")),
+        folders.reuse[1].records,
+    )
+    assert run_phase.reused_record_path(phase_a_run("scratch", 16), folders) is None
+    assert run_phase.reused_record_path(phase_a_run("scratch"), folders) is not None

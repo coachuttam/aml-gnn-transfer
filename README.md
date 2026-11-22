@@ -141,7 +141,8 @@ All run from `notebooks/colab_runner.ipynb` by setting `RUN_SET` in its first ce
 | --- | --- | --- |
 | `phaseB` (done) | Zero-shot: the pilot's GIN source model scored on LI-Small test, no training. The threshold is chosen on LI-Small validation (one number, so slightly generous to zero-shot) | 1 |
 | `phaseA` (done) | GIN, 100% labels, scratch and fine-tune, budget 20, every epoch validated (ids end `_b20`; the pilot is not touched) | 2 |
-| `phaseC` | GIN, fractions 10/25/50/100% x scratch/fine-tune x seeds 0, 1, 2, nested label masks, at `BUDGET_C`. If `BUDGET_C` equals the pilot's budget (8), the pilot's six seed-0 runs are reused, not re-run | 24 (18 to run at budget 8) |
+| `phaseC` | GIN, fractions in `PHASE_C_FRACTIONS` (10/25/100%) x scratch/fine-tune x seeds in `PHASE_C_SEEDS` (0, 1), nested label masks, at `BUDGET_C`. Finished pilot runs (budget 8) or Phase A runs (budget 20) are reused when `BUDGET_C` matches, not re-run | 12 (6 to run at budget 8, 12 at 16, 10 at 20) |
+| `export_curves` | No GPU: rebuilds the validation curves of the pilot and Phase A from their Multi-GNN logs on Drive, into `pilot/curves/` and `phaseA/curves/` | 0 |
 | `phaseD` | Train `pna_source_f1.0_s0` on HI-Small (Multi-PNA + EU), then the Phase C grid with PNA; seeds in `PHASE_D_SEEDS` (default 0) | 9 |
 
 `BUDGET_C` is `None` until it is set in `src/config.py` after reading Phase A; Phases C and D refuse to start without it. Every run prints an estimate, then its real minutes and Colab units with a running total, and a run expected to pass 3 GPU hours stops unless the owner has approved it (`ALLOW_LONG_RUNS`). A finished run (record with status `completed` or `no_improvement`) is skipped on a re-run, and each finished scratch/fine-tune pair is checked for identical kept labels and equal gradient steps.

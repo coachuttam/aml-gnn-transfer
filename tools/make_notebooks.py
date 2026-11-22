@@ -93,7 +93,11 @@ Set `RUN_FULL = True` only after the owner has approved the GPU time (AGENTS.md 
         code(CLONE_REPO),
         code(KAGGLE_IDS),
         markdown(ENVIRONMENT_NOTE),
-        code(ENVIRONMENT),
+        code(
+            only_with_gpu(
+                ENVIRONMENT, 'PYTHON, ENVIRONMENT_LABEL = sys.executable, "none"'
+            )
+        ),
         markdown(
             "Format HI-Small and LI-Small with IBM's script and write the stock run's `data_config.json` (CPU only, slow)."
         ),
@@ -150,10 +154,11 @@ run(f"grep -E 'Validation F1|Test F1' {WORK}/data/multignn_runs/{STOCK_RUN_ID}/l
 
 
 COLAB_SETUP = r"""
-RUN_SET = "smoke"  # "smoke" | "pilot" | "phaseA" | "phaseB" | "phaseC" | "phaseD"
+RUN_SET = "smoke"  # "smoke" | "pilot" | "phaseA" | "phaseB" | "phaseC" | "phaseD" | "export_curves"
 D_SEEDS = None  # phaseD only, e.g. [0, 1, 2]; None = PHASE_D_SEEDS in src/config.py
 ALLOW_LONG_RUNS = False  # True only after the owner approved a run over 3 GPU hours
-assert RUN_SET in ("smoke", "pilot", "phaseA", "phaseB", "phaseC", "phaseD"), RUN_SET
+assert RUN_SET in ("smoke", "pilot", "phaseA", "phaseB", "phaseC", "phaseD", "export_curves"), RUN_SET
+NEEDS_GPU = RUN_SET != "export_curves"  # export_curves only reads logs on Drive
 WORK = "/content"
 REPO = f"{WORK}/repo"
 
@@ -199,6 +204,19 @@ if ALLOW_LONG_RUNS:
 run(f"{sys.executable} -m src.run_phase " + " ".join(words))
 """
 
+COLAB_EXPORT = r"""
+run(f"{sys.executable} -m src.export_curves --home {DRIVE} --sets pilot phaseA")
+run(f"ls {DRIVE}/pilot/curves {DRIVE}/phaseA/curves")
+"""
+
+
+def only_with_gpu(source: str, otherwise: str) -> str:
+    """The code, run only when the set needs the GPU; `otherwise` runs for export_curves."""
+    body = "\n".join(
+        "    " + line if line else line for line in source.strip().splitlines()
+    )
+    return "if NEEDS_GPU:\n" + body + "\nelse:\n    " + otherwise + "\n"
+
 
 def colab_cells() -> List[Dict[str, Any]]:
     """The Colab runner: pick RUN_SET in the first cell; "smoke" is the safe default."""
@@ -222,21 +240,32 @@ Pick `RUN_SET` in the first cell:
 | `pilot` | GIN pilot: one source model, 10/25/100% labels, scratch vs fine-tune |
 | `phaseB` | zero-shot: the pilot's GIN source model scored on LI-Small test, no training |
 | `phaseA` | GIN at 100% labels, 20-epoch budget, scratch and fine-tune (ids end `_b20`) |
-| `phaseC` | GIN grid: 4 fractions x 2 setups x 3 seeds; needs `BUDGET_C` in `src/config.py` |
+| `phaseC` | GIN grid: `PHASE_C_FRACTIONS` x 2 setups x `PHASE_C_SEEDS` (10/25/100%, seeds 0 and 1); needs `BUDGET_C` in `src/config.py`; reuses pilot (budget 8) or Phase A (budget 20) runs |
 | `phaseD` | PNA: trains its HI-Small source model, then the same grid; needs `BUDGET_C` |
+| `export_curves` | no GPU: rebuilds validation curves for the pilot and Phase A from their Multi-GNN logs on Drive, into `pilot/curves/` and `phaseA/curves/` |
 
 Each run prints an estimate before it starts, then its real minutes and Colab units with a running total.
 A run expected to pass 3 GPU hours stops unless `ALLOW_LONG_RUNS = True` (AGENTS.md rule 6: ask the owner first).
 Phases A to D start from the pilot's source model on Drive, so run the pilot's source run first.
 """),
-        code(RUN_HELPER + COLAB_SETUP + GPU_GATE),
+        code(
+            RUN_HELPER
+            + COLAB_SETUP
+            + only_with_gpu(
+                GPU_GATE, 'GPU_NAME = "none"; print("export_curves: no GPU needed")'
+            )
+        ),
         code(CLONE_REPO),
         markdown(ENVIRONMENT_NOTE),
-        code(ENVIRONMENT),
+        code(
+            only_with_gpu(
+                ENVIRONMENT, 'PYTHON, ENVIRONMENT_LABEL = sys.executable, "none"'
+            )
+        ),
         markdown(
             "Download HI-Small and LI-Small from Kaggle (skipped if already on Drive) and format them with IBM's script (CPU only, slow the first time)."
         ),
-        code(COLAB_DOWNLOAD),
+        code(only_with_gpu(COLAB_DOWNLOAD, "print('export_curves: no download')")),
         markdown(
             'Smoke test (only when `RUN_SET = "smoke"`). The first run of each dataset builds its prepared graph (several minutes of CPU, GPU idle) and saves it to Drive.'
         ),
@@ -257,6 +286,13 @@ else:
             r"""
 if RUN_SET == "smoke":
     print("RUN_SET is smoke: no phase runs")
+elif RUN_SET == "export_curves":
+"""
+            + "\n".join(
+                "    " + line if line else line
+                for line in COLAB_EXPORT.strip().splitlines()
+            )
+            + """
 else:
 """
             + "\n".join(
@@ -268,7 +304,7 @@ else:
             "What the records say. Copy that records folder into the repo (`results/pilot/records/` for the pilot, `results/phases/<set>/records/` for a phase) and run `python -m src.collect`."
         ),
         code(r"""
-if RUN_SET != "smoke":
+if RUN_SET not in ("smoke", "export_curves"):
     from pathlib import Path
     from src.phases import phase_folders
     records_dir = phase_folders(RUN_SET, Path(DRIVE)).records

@@ -13,7 +13,8 @@
 #   budget          step budget in epochs at 100% labels (null here = not set yet)
 #   suffix_budget   true = add "_b<budget>" to run ids, so they never meet the pilot's
 #   source_seed     which source model finetune and zero_shot start from
-#   reuse_from      another set whose finished records count here when the budget matches
+#   reuse_from      sets whose finished records count here when the budget matches
+#                   (a set with suffix_budget is looked up under its "_b<budget>" ids)
 #   *_folder        where records and models live; source_folder holds the source model
 
 pilot:
@@ -62,17 +63,17 @@ phaseA:
   source_folder: pilot/models
 
 phaseC:
-  description: "GIN label-scarcity grid: 4 fractions x scratch/finetune x 3 seeds"
+  description: "GIN label-scarcity grid: PHASE_C_FRACTIONS x scratch/finetune x PHASE_C_SEEDS"
   model: gin
   source_epochs: null
   zero_shot: false
   arms: [scratch, finetune]
-  fractions: $LABEL_FRACTIONS
-  seeds: $SEEDS
+  fractions: $PHASE_C_FRACTIONS
+  seeds: $PHASE_C_SEEDS
   budget: $BUDGET_C
   suffix_budget: false
   source_seed: $PILOT_SOURCE_SEED
-  reuse_from: pilot
+  reuse_from: [pilot, phaseA]
   records_folder: phaseC/records
   models_folder: phaseC/models
   source_folder: pilot/models

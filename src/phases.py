@@ -13,7 +13,7 @@ Example:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -60,13 +60,21 @@ class PhaseRun:
 
 
 @dataclass(frozen=True)
+class ReuseSource:
+    """Another set's records folder whose finished runs count here (same budget)."""
+
+    records: Path
+    suffix_budget: bool  # that set names its runs "..._b<budget>"
+
+
+@dataclass(frozen=True)
 class PhaseFolders:
     """Where a set keeps its records and models on Drive."""
 
     records: Path
     models: Path
     source_models: Path
-    reuse_records: Optional[Path] = None  # finished runs here count too (same budget)
+    reuse: Tuple[ReuseSource, ...] = ()
 
 
 def resolve(value: Any) -> Any:
@@ -96,14 +104,30 @@ def phase_folders(
 ) -> PhaseFolders:
     """The set's records, models and source-model folders inside `home`."""
     settings = load_phase(name, phases_file)
+    reuse = []
+    for other in settings.get("reuse_from") or []:
+        theirs = load_phase(other, phases_file)
+        reuse.append(
+            ReuseSource(home / theirs["records_folder"], theirs["suffix_budget"])
+        )
     return PhaseFolders(
         home / settings["records_folder"],
         home / settings["models_folder"],
         home / settings["source_folder"],
-        home / load_phase(settings["reuse_from"], phases_file)["records_folder"]
-        if settings.get("reuse_from")
-        else None,
+        tuple(reuse),
     )
+
+
+def budget_suffix(budget: int) -> str:
+    """The run-id ending of sets that name runs by budget, e.g. "_b20"."""
+    return "_b%d" % budget
+
+
+def id_in_source(run: PhaseRun, source: ReuseSource) -> str:
+    """The id this run has in a reuse source (Phase A adds "_b<budget>")."""
+    if not source.suffix_budget:
+        return run.run_id
+    return replace(run, run_suffix=budget_suffix(run.step_budget_epochs)).run_id
 
 
 def require_budget(name: str, budget: Optional[int]) -> int:
@@ -155,7 +179,7 @@ def phase_runs(
     runs = single_runs(settings)
     if settings["arms"]:
         chosen = require_budget(name, budget or settings["budget"])
-        suffix = "_b%d" % chosen if settings["suffix_budget"] else ""
+        suffix = budget_suffix(chosen) if settings["suffix_budget"] else ""
         runs += grid_runs(settings, seeds or settings["seeds"], chosen, suffix)
     return runs
 

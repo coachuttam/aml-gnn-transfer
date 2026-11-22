@@ -165,6 +165,12 @@ PHASE_A_BUDGET = 20
 # after reading Phase A, and Phases C and D refuse to start until it is a number.
 BUDGET_C: Optional[int] = None
 
+# Phase C is a smaller grid than the PRD's 4 x 3 to fit the Colab units left: three
+# label shares and two seeds. Pilot seed-0 runs and Phase A runs are reused when
+# the budget matches, so only the rest is run.
+PHASE_C_FRACTIONS: Tuple[float, ...] = (0.10, 0.25, 1.00)
+PHASE_C_SEEDS: Tuple[int, ...] = (0, 1)
+
 # Phase D: Multi-PNA + EU. One seed by default because PNA is slower than GIN;
 # more seeds can be passed to src.run_phase with --seeds.
 PHASE_D_SEEDS: Tuple[int, ...] = (0,)

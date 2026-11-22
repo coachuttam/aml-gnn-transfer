@@ -38,6 +38,7 @@ from src.phase_estimate import (
 from src.phases import (
     PhaseFolders,
     PhaseRun,
+    id_in_source,
     pairs,
     phase_folders,
     phase_names,
@@ -55,28 +56,30 @@ def record_status(run: PhaseRun, records_dir: Path) -> Optional[str]:
     return json.loads(path.read_text())["config"].get("status", "completed")
 
 
-def reused_record_dir(run: PhaseRun, folders: PhaseFolders) -> Optional[Path]:
-    """The reuse folder, if it holds this run's record made at the same budget.
+def reused_record_path(run: PhaseRun, folders: PhaseFolders) -> Optional[Path]:
+    """A finished record of this run in a reuse folder, made at the same budget.
 
-    Lets Phase C keep the pilot's seed-0 runs when BUDGET_C equals the pilot's
-    budget: same id, same budget, same labels, so re-running would repeat them.
+    Lets Phase C keep the pilot's seed-0 runs (budget 8) or Phase A's 100% runs
+    (budget 20) when BUDGET_C equals that budget: same labels and same steps, so
+    re-running would repeat them.
     """
-    if folders.reuse_records is None:
-        return None
-    path = record_path(run.run_id, folders.reuse_records)
-    if not path.exists():
-        return None
-    config = json.loads(path.read_text())["config"]
-    same_budget = config.get("step_budget_epochs") == run.step_budget_epochs
-    done = config.get("status", "completed") in FINISHED_STATUSES
-    return folders.reuse_records if same_budget and done else None
+    for source in folders.reuse:
+        path = record_path(id_in_source(run, source), source.records)
+        if not path.exists():
+            continue
+        config = json.loads(path.read_text())["config"]
+        same_budget = config.get("step_budget_epochs") == run.step_budget_epochs
+        if same_budget and config.get("status", "completed") in FINISHED_STATUSES:
+            return path
+    return None
 
 
 def finished_dir(run: PhaseRun, folders: PhaseFolders) -> Optional[Path]:
     """Where this run's finished record lives (its own folder first), or None."""
     if is_finished(run, folders.records):
         return folders.records
-    return reused_record_dir(run, folders)
+    reused = reused_record_path(run, folders)
+    return reused.parent if reused else None
 
 
 def is_finished(run: PhaseRun, records_dir: Path) -> bool:
@@ -101,17 +104,14 @@ def check_pair(
     finetune: PhaseRun,
     records_dir: Path,
     quiet: bool = False,
-    reuse_dir: Optional[Path] = None,
+    folders: Optional[PhaseFolders] = None,
 ) -> None:
     """Raise if a finished pair differs in kept labels or gradient steps."""
     paths = []
     for run in (scratch, finetune):
         own = record_path(run.run_id, records_dir)
-        paths.append(
-            own
-            if own.exists() or reuse_dir is None
-            else record_path(run.run_id, reuse_dir)
-        )
+        reused = reused_record_path(run, folders) if folders else None
+        paths.append(own if own.exists() or reused is None else reused)
     if not all(path.exists() for path in paths):
         return
     problems = mismatches(read_record(paths[0]), read_record(paths[1]))
@@ -231,11 +231,9 @@ def run_set(arguments: argparse.Namespace) -> None:
         run_one(run, number, len(runs), context)
         for scratch, finetune in pairs([run] + runs):
             if run in (scratch, finetune):
-                check_pair(
-                    scratch, finetune, folders.records, reuse_dir=folders.reuse_records
-                )
+                check_pair(scratch, finetune, folders.records, folders=folders)
     for scratch, finetune in pairs(runs):  # pairs finished in an earlier session
-        check_pair(scratch, finetune, folders.records, True, folders.reuse_records)
+        check_pair(scratch, finetune, folders.records, True, folders)
     print("\nDone. Units spent this session: %.2f" % context.ledger.total_units)
 
 
