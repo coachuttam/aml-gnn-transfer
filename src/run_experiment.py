@@ -159,12 +159,14 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
     run_folder = prepare_run_folder(plan)
     os.chdir(run_folder)  # Multi-GNN reads ./model_settings.json from here
     settings = read_training_settings(run_folder, plan.model)
-    extras = {"validation_curve": read_validation_curve(run_folder)}
+    extras: dict = {}
     summary, training_seconds, resumed = None, 0.0, False
     if plan.trains:
         summary, training_seconds, resumed = train_or_resume(
             plan, run_folder, smoke_test
         )
+        # Read the log only now: before training it does not exist yet.
+        extras["validation_curve"] = read_validation_curve(run_folder)
         if not has_checkpoint(plan):  # a result, not a crash: see experiment_record
             record = build_no_improvement_record(
                 plan, summary, training_seconds, environment, smoke_test,

@@ -250,3 +250,36 @@ def test_a_finished_record_holds_validation_metrics_and_the_validation_curve() -
     )  # fmt: skip
     assert record.metrics["validation"]["minority_f1"] == metrics.minority_f1
     assert record.config["validation_curve"] == [[4, 0.1]]
+
+
+def test_the_validation_curve_is_read_after_training_has_written_the_log(
+    monkeypatch, tmp_path
+) -> None:
+    from src import run_experiment as module
+
+    order = []
+    plan = plan_run("gin", "scratch", 1.0, 0, 20)
+    monkeypatch.setattr(module, "check_starting_point", lambda *a, **k: None)
+    monkeypatch.setattr(module, "prepare_run_folder", lambda p: tmp_path)
+    monkeypatch.setattr(module.os, "chdir", lambda p: None)
+    monkeypatch.setattr(module, "read_training_settings", lambda *a: {})
+    monkeypatch.setattr(
+        module,
+        "train_or_resume",
+        lambda *a: order.append("train") or (None, 1.0, False),
+    )
+    monkeypatch.setattr(
+        module, "read_validation_curve", lambda p: order.append("curve") or [[1, 0.2]]
+    )
+    monkeypatch.setattr(module, "has_checkpoint", lambda p: True)
+    monkeypatch.setattr(module, "score_checkpoint", lambda r: None)
+    monkeypatch.setattr(module, "scoring_request", lambda p: None)
+    seen = {}
+    monkeypatch.setattr(
+        module,
+        "build_experiment_record",
+        lambda *a: seen.update(extras=a[-1]) or "record",
+    )
+    monkeypatch.setattr(module, "write_record", lambda r: tmp_path)
+    module.run_experiment(plan, "test", False)
+    assert order == ["train", "curve"] and seen["extras"]["validation_curve"]

@@ -2,7 +2,7 @@
 
 Does pre-training a graph neural network on synthetic AML data reduce how many labelled laundering cases a bank needs?
 
-**Status: pilot done (one seed, GIN only); Phases A to D are built and tested, not yet run.** The pilot numbers below are a first look, not the answer to RQ2.
+**Status: pilot, Phase B and Phase A done (one seed, GIN only); Phases C and D are built and tested, not yet run.** The numbers below are a first look, not the answer to RQ2.
 
 Docs: [PRD](PRD.md) · [Architecture](ARCHITECTURE.md) · [Design system](DESIGN_SYSTEM.md) · [Agent instructions](AGENTS.md)
 
@@ -117,14 +117,30 @@ Caveats:
 - **Thresholds.** The alert threshold is the best-F1 threshold on the validation period, as in Project 2.
 - **Superseded runs.** The first runs at budget 3 are kept in `results/pilot/records/superseded/` and are not in the table.
 
-### Phases A to D (built, not yet run)
+### Phase B and Phase A (GIN, 100% of the labels, one seed)
+
+| System (LI-Small test) | Minority F1 | PR-AUC | Precision@100 | Recall@10k | Best epoch | Units |
+| --- | --- | --- | --- | --- | --- | --- |
+| Trained on HI-Small only (zero-shot) | 0.3% | 0.001 | 0.00 | 0.2% | n/a | 0.11 |
+| Pilot, budget 8: from scratch | 20.5% | 0.210 | 0.83 | 56.4% | 7 of 8 | 2.31 |
+| Pilot, budget 8: pre-trained, fine-tuned | 33.1% | 0.280 | 0.90 | 58.1% | 8 of 8 | 2.31 |
+| Phase A, budget 20: from scratch | 31.5% | 0.235 | 0.87 | 41.5% | 16 of 20 | 5.54 |
+| Phase A, budget 20: pre-trained, fine-tuned | 34.9% | 0.300 | 0.99 | 58.7% | 10 of 20 | 5.58 |
+
+Units are run time x the L4 rate (1.94 units per hour) from each record. One seed per row, so no gap here is called a win.
+
+- **Zero-shot does not work.** The HI-Small model scored on LI-Small finds 56% of laundering but raises 293,581 alerts (precision 0.15%). The two datasets differ too much for the model to be used as it is; only fine-tuning transfers anything.
+- **Scratch needed more steps.** At budget 20, scratch rises from 20.5% to 31.5% F1 and its best epoch moves from 7 to 16. Fine-tune moves less (33.1% to 34.9%) and peaks at epoch 10. The 100% gap shrinks from 12.6 to 3.4 F1 points, so the pilot's large gap was partly a short budget. Still one seed.
+- **Validation curves are missing for Phase A.** A bug read the Multi-GNN log before training wrote it, so `validation_curve` is empty in both records. It is fixed for new runs; for these two, `python -m src.export_curves` on the Drive logs rebuilds them without touching the records. The plateau epoch is therefore not yet measured; only the best epochs above are.
+
+### Phases A to D
 
 All run from `notebooks/colab_runner.ipynb` by setting `RUN_SET` in its first cell. Sets are described in `configs/phases.yaml`; the numbers behind them are named constants in `src/config.py`.
 
 | RUN_SET | What it runs | Runs |
 | --- | --- | --- |
-| `phaseB` | Zero-shot: the pilot's GIN source model scored on LI-Small test, no training. The threshold is chosen on LI-Small validation (one number, so slightly generous to zero-shot) | 1 |
-| `phaseA` | GIN, 100% labels, scratch and fine-tune, budget 20, every epoch validated (ids end `_b20`; the pilot is not touched) | 2 |
+| `phaseB` (done) | Zero-shot: the pilot's GIN source model scored on LI-Small test, no training. The threshold is chosen on LI-Small validation (one number, so slightly generous to zero-shot) | 1 |
+| `phaseA` (done) | GIN, 100% labels, scratch and fine-tune, budget 20, every epoch validated (ids end `_b20`; the pilot is not touched) | 2 |
 | `phaseC` | GIN, fractions 10/25/50/100% x scratch/fine-tune x seeds 0, 1, 2, nested label masks, at `BUDGET_C`. If `BUDGET_C` equals the pilot's budget (8), the pilot's six seed-0 runs are reused, not re-run | 24 (18 to run at budget 8) |
 | `phaseD` | Train `pna_source_f1.0_s0` on HI-Small (Multi-PNA + EU), then the Phase C grid with PNA; seeds in `PHASE_D_SEEDS` (default 0) | 9 |
 

@@ -1,0 +1,74 @@
+{
+  "run_id": "gin_finetune_f1.0_s0_b20",
+  "model": "gin",
+  "mode": "finetune",
+  "fraction": 1.0,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": 20,
+    "epochs_requested": 20,
+    "validations": 20,
+    "steps_per_epoch": 542,
+    "gradient_steps": 10840,
+    "environment": "env.yml / NVIDIA L4",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 10182.03447508812,
+    "scoring_seconds": 178.03158402442932,
+    "multignn_settings": {
+      "lr": 0.006213266113989207,
+      "w_ce1": 1.0000182882773443,
+      "w_ce2": 6.275014431494497,
+      "dropout": 0.00983468338330501,
+      "final_dropout": 0.10527690625126304,
+      "n_hidden": 66.00315515631006
+    },
+    "stock_training_loop": false,
+    "checkpoint_run_id": "gin_finetune_f1.0_s0_b20",
+    "fine_tuned_from": "gin_source_f1.0_s0",
+    "train_transactions": 4432934,
+    "labels_kept": 4432934,
+    "laundering_labels_kept": 1993,
+    "kept_labels_fingerprint": "0dc05dd6e4020377",
+    "label_mask_seed": 0,
+    "checkpoint_is_last_epoch": false,
+    "validation_curve": []
+  },
+  "ours_commit": "464ab6652e6df1b820fe4eae41f58871933ed674",
+  "multignn_commit": "252b0252afca109d1d216c411c59ff70753b25fc",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.34894259818731116,
+      "precision": 0.4425287356321839,
+      "recall": 0.2880299251870324,
+      "pr_auc": 0.30043981831488387,
+      "precision_at_100": 0.99,
+      "alerts": 522,
+      "threshold": 0.41845282912254333,
+      "recall_at_alert_budget": {
+        "10000": 0.587281795511222,
+        "25000": 0.699501246882793,
+        "50000": 0.7593516209476309
+      }
+    },
+    "validation": {
+      "minority_f1": 0.3033268101761253,
+      "precision": 0.6150793650793651,
+      "recall": 0.2012987012987013,
+      "pr_auc": 0.2230492357361125,
+      "precision_at_100": 0.8,
+      "alerts": 252,
+      "threshold": 0.41845282912254333,
+      "recall_at_alert_budget": {
+        "10000": 0.5584415584415584,
+        "25000": 0.687012987012987,
+        "50000": 0.7558441558441559
+      }
+    }
+  },
+  "epochs_trained": 20,
+  "best_epoch": 10,
+  "runtime_seconds": 10360.066059112549
+}

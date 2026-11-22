@@ -1,0 +1,74 @@
+{
+  "run_id": "gin_scratch_f1.0_s0_b20",
+  "model": "gin",
+  "mode": "scratch",
+  "fraction": 1.0,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": 20,
+    "epochs_requested": 20,
+    "validations": 20,
+    "steps_per_epoch": 542,
+    "gradient_steps": 10840,
+    "environment": "env.yml / NVIDIA L4",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 10115.336261987686,
+    "scoring_seconds": 173.84207153320312,
+    "multignn_settings": {
+      "lr": 0.006213266113989207,
+      "w_ce1": 1.0000182882773443,
+      "w_ce2": 6.275014431494497,
+      "dropout": 0.00983468338330501,
+      "final_dropout": 0.10527690625126304,
+      "n_hidden": 66.00315515631006
+    },
+    "stock_training_loop": false,
+    "checkpoint_run_id": "gin_scratch_f1.0_s0_b20",
+    "fine_tuned_from": null,
+    "train_transactions": 4432934,
+    "labels_kept": 4432934,
+    "laundering_labels_kept": 1993,
+    "kept_labels_fingerprint": "0dc05dd6e4020377",
+    "label_mask_seed": 0,
+    "checkpoint_is_last_epoch": false,
+    "validation_curve": []
+  },
+  "ours_commit": "464ab6652e6df1b820fe4eae41f58871933ed674",
+  "multignn_commit": "252b0252afca109d1d216c411c59ff70753b25fc",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.31521739130434784,
+      "precision": 0.4176954732510288,
+      "recall": 0.25311720698254364,
+      "pr_auc": 0.23454229622313988,
+      "precision_at_100": 0.87,
+      "alerts": 486,
+      "threshold": 0.6452684998512268,
+      "recall_at_alert_budget": {
+        "10000": 0.415211970074813,
+        "25000": 0.5473815461346634,
+        "50000": 0.756857855361596
+      }
+    },
+    "validation": {
+      "minority_f1": 0.23795476892822026,
+      "precision": 0.4898785425101215,
+      "recall": 0.15714285714285714,
+      "pr_auc": 0.17901129024682444,
+      "precision_at_100": 0.71,
+      "alerts": 247,
+      "threshold": 0.6452684998512268,
+      "recall_at_alert_budget": {
+        "10000": 0.5675324675324676,
+        "25000": 0.7064935064935065,
+        "50000": 0.7519480519480519
+      }
+    }
+  },
+  "epochs_trained": 20,
+  "best_epoch": 16,
+  "runtime_seconds": 10289.17833352089
+}

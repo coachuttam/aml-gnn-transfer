@@ -1,0 +1,74 @@
+{
+  "run_id": "gin_zero_shot_f1.0_s0",
+  "model": "gin",
+  "mode": "zero_shot",
+  "fraction": 1.0,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": 0,
+    "epochs_requested": 0,
+    "validations": 0,
+    "steps_per_epoch": null,
+    "gradient_steps": null,
+    "environment": "env.yml / NVIDIA L4",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 0.0,
+    "scoring_seconds": 198.29160118103027,
+    "multignn_settings": {
+      "lr": 0.006213266113989207,
+      "w_ce1": 1.0000182882773443,
+      "w_ce2": 6.275014431494497,
+      "dropout": 0.00983468338330501,
+      "final_dropout": 0.10527690625126304,
+      "n_hidden": 66.00315515631006
+    },
+    "stock_training_loop": false,
+    "checkpoint_run_id": "gin_source_f1.0_s0",
+    "fine_tuned_from": null,
+    "train_transactions": null,
+    "labels_kept": null,
+    "laundering_labels_kept": null,
+    "kept_labels_fingerprint": null,
+    "label_mask_seed": 0,
+    "checkpoint_is_last_epoch": null,
+    "validation_curve": []
+  },
+  "ours_commit": "464ab6652e6df1b820fe4eae41f58871933ed674",
+  "multignn_commit": "252b0252afca109d1d216c411c59ff70753b25fc",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.0030300662742074103,
+      "precision": 0.0015191718810140984,
+      "recall": 0.5561097256857855,
+      "pr_auc": 0.0012727406542692205,
+      "precision_at_100": 0.0,
+      "alerts": 293581,
+      "threshold": 8.930121111916378e-05,
+      "recall_at_alert_budget": {
+        "10000": 0.0024937655860349127,
+        "25000": 0.004987531172069825,
+        "50000": 0.018703241895261846
+      }
+    },
+    "validation": {
+      "minority_f1": 0.0036800296599405428,
+      "precision": 0.0018448914405297867,
+      "recall": 0.6961038961038961,
+      "pr_auc": 0.001484851164149238,
+      "precision_at_100": 0.0,
+      "alerts": 290532,
+      "threshold": 8.930121111916378e-05,
+      "recall_at_alert_budget": {
+        "10000": 0.006493506493506494,
+        "25000": 0.016883116883116882,
+        "50000": 0.06363636363636363
+      }
+    }
+  },
+  "epochs_trained": 0,
+  "best_epoch": 9,
+  "runtime_seconds": 198.29160118103027
+}
