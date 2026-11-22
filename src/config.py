@@ -161,9 +161,10 @@ COLAB_UNITS_AVAILABLE = 59.76  # the owner's balance when the budget was set
 # finetune are still improving after 8 epochs. Every epoch is validated.
 PHASE_A_BUDGET = 20
 
-# Phase C's budget, in epochs at fraction 1.0. None on purpose: the owner sets it
-# after reading Phase A, and Phases C and D refuse to start until it is a number.
-BUDGET_C: Optional[int] = None
+# Phase C's budget, in epochs at fraction 1.0. 20 = Phase A's budget, so Phase C
+# reuses the two Phase A runs (the owner's choice after reading Phase A's curves).
+# Phases C and D refuse to start if it is None.
+BUDGET_C: Optional[int] = 20
 
 # Phase C is a smaller grid than the PRD's 4 x 3 to fit the Colab units left: three
 # label shares and two seeds. Pilot seed-0 runs and Phase A runs are reused when
