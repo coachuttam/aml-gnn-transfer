@@ -13,6 +13,7 @@
 #   budget          step budget in epochs at 100% labels (null here = not set yet)
 #   suffix_budget   true = add "_b<budget>" to run ids, so they never meet the pilot's
 #   source_seed     which source model finetune and zero_shot start from
+#   reuse_from      another set whose finished records count here when the budget matches
 #   *_folder        where records and models live; source_folder holds the source model
 
 pilot:
@@ -71,6 +72,7 @@ phaseC:
   budget: $BUDGET_C
   suffix_budget: false
   source_seed: $PILOT_SOURCE_SEED
+  reuse_from: pilot
   records_folder: phaseC/records
   models_folder: phaseC/models
   source_folder: pilot/models

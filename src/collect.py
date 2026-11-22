@@ -16,8 +16,10 @@ from dataclasses import astuple, dataclass, fields
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from src import config
 from src.config import (
     ALERT_BUDGETS,
+    LABEL_FRACTIONS,
     PILOT_RECORDS_DIR,
     RESULTS_DIR,
 )
@@ -101,6 +103,27 @@ def summary_row(record: RunRecord, run_set: str) -> SummaryRow:
     )  # fmt: skip
 
 
+def reused_pilot_rows(folders: List[Tuple[str, Path]], have: set) -> List[SummaryRow]:
+    """Pilot scratch/finetune runs that Phase C reuses (same budget, grid fractions).
+
+    Matches src/run_phase.py: a pilot record counts for phaseC only when its step
+    budget equals BUDGET_C. Runs phaseC has its own record for are not repeated.
+    """
+    pilot = dict(folders).get("pilot")
+    if pilot is None or config.BUDGET_C is None or "phaseC" not in dict(folders):
+        return []
+    rows = []
+    for record in load_records(pilot):
+        reusable = (
+            record.mode in ("scratch", "finetune")
+            and record.fraction in LABEL_FRACTIONS
+        )
+        if reusable and record.config.get("step_budget_epochs") == config.BUDGET_C:
+            if record.run_id not in have:
+                rows.append(summary_row(record, "phaseC"))
+    return rows
+
+
 def summary_rows(folders: List[Tuple[str, Path]]) -> List[SummaryRow]:
     """All rows, ordered by set, model, arm, fraction and seed."""
     rows = [
@@ -108,6 +131,8 @@ def summary_rows(folders: List[Tuple[str, Path]]) -> List[SummaryRow]:
         for run_set, folder in folders
         for record in load_records(folder)
     ]
+    own = {row.run_id for row in rows if row.run_set == "phaseC"}
+    rows += reused_pilot_rows(folders, own)
     return sorted(
         rows,
         key=lambda r: (r.run_set, r.model, ARM_ORDER[r.arm], r.fraction, r.seed),

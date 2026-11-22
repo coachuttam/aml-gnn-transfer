@@ -213,3 +213,34 @@ def test_record_status_reads_the_json_without_the_full_record(tmp_path: Path) ->
     run = phase_runs("phaseB")[0]
     (tmp_path / (run.run_id + ".json")).write_text(json.dumps({"config": {}}))
     assert run_phase.record_status(run, tmp_path) == "completed"
+
+
+# --- Phase C reuses the pilot's records when the budget matches ---
+
+
+def pilot_run(mode: str, fraction: float, seed: int = 0) -> PhaseRun:
+    return PhaseRun("gin", mode, fraction, seed, 8, 0)
+
+
+def test_phase_c_skips_pilot_runs_made_at_the_same_budget(
+    tmp_path: Path, monkeypatch
+) -> None:
+    folders = phase_folders("phaseC", tmp_path)
+    for mode in ("scratch", "finetune"):
+        write_record(fake_record(pilot_run(mode, 0.1)), folders.reuse_records)
+    started: List[str] = []
+    monkeypatch.setattr(run_phase, "launch", fake_launcher(started))
+    run_phase.run_set(arguments(tmp_path, "phaseC", seeds=[0], budget=8))
+    assert "gin_scratch_f0.1_s0" not in started and len(started) == 6
+
+
+def test_a_pilot_record_at_another_budget_is_not_reused(tmp_path: Path) -> None:
+    folders = phase_folders("phaseC", tmp_path)
+    write_record(fake_record(pilot_run("scratch", 0.1)), folders.reuse_records)
+    other = PhaseRun("gin", "scratch", 0.1, 0, 20, 0)
+    assert run_phase.reused_record_dir(other, folders) is None
+    assert run_phase.reused_record_dir(pilot_run("scratch", 0.1), folders) is not None
+
+
+def test_other_sets_never_reuse_anything(tmp_path: Path) -> None:
+    assert phase_folders("phaseA", tmp_path).reuse_records is None

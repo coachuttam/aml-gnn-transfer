@@ -66,6 +66,7 @@ class PhaseFolders:
     records: Path
     models: Path
     source_models: Path
+    reuse_records: Optional[Path] = None  # finished runs here count too (same budget)
 
 
 def resolve(value: Any) -> Any:
@@ -99,6 +100,9 @@ def phase_folders(
         home / settings["records_folder"],
         home / settings["models_folder"],
         home / settings["source_folder"],
+        home / load_phase(settings["reuse_from"], phases_file)["records_folder"]
+        if settings.get("reuse_from")
+        else None,
     )
 
 

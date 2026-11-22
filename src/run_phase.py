@@ -55,6 +55,30 @@ def record_status(run: PhaseRun, records_dir: Path) -> Optional[str]:
     return json.loads(path.read_text())["config"].get("status", "completed")
 
 
+def reused_record_dir(run: PhaseRun, folders: PhaseFolders) -> Optional[Path]:
+    """The reuse folder, if it holds this run's record made at the same budget.
+
+    Lets Phase C keep the pilot's seed-0 runs when BUDGET_C equals the pilot's
+    budget: same id, same budget, same labels, so re-running would repeat them.
+    """
+    if folders.reuse_records is None:
+        return None
+    path = record_path(run.run_id, folders.reuse_records)
+    if not path.exists():
+        return None
+    config = json.loads(path.read_text())["config"]
+    same_budget = config.get("step_budget_epochs") == run.step_budget_epochs
+    done = config.get("status", "completed") in FINISHED_STATUSES
+    return folders.reuse_records if same_budget and done else None
+
+
+def finished_dir(run: PhaseRun, folders: PhaseFolders) -> Optional[Path]:
+    """Where this run's finished record lives (its own folder first), or None."""
+    if is_finished(run, folders.records):
+        return folders.records
+    return reused_record_dir(run, folders)
+
+
 def is_finished(run: PhaseRun, records_dir: Path) -> bool:
     """True if the run has a record that ends it: it is skipped, never redone.
 
@@ -73,10 +97,21 @@ def is_finished(run: PhaseRun, records_dir: Path) -> bool:
 
 
 def check_pair(
-    scratch: PhaseRun, finetune: PhaseRun, records_dir: Path, quiet: bool = False
+    scratch: PhaseRun,
+    finetune: PhaseRun,
+    records_dir: Path,
+    quiet: bool = False,
+    reuse_dir: Optional[Path] = None,
 ) -> None:
     """Raise if a finished pair differs in kept labels or gradient steps."""
-    paths = [record_path(run.run_id, records_dir) for run in (scratch, finetune)]
+    paths = []
+    for run in (scratch, finetune):
+        own = record_path(run.run_id, records_dir)
+        paths.append(
+            own
+            if own.exists() or reuse_dir is None
+            else record_path(run.run_id, reuse_dir)
+        )
     if not all(path.exists() for path in paths):
         return
     problems = mismatches(read_record(paths[0]), read_record(paths[1]))
@@ -121,9 +156,13 @@ def launch(
     return time.time() - start
 
 
-def print_plan(name: str, runs: List[PhaseRun], gpu: str, finished: int) -> None:
-    """The set's size and estimate, before anything runs."""
-    estimate = estimate_phase(runs, gpu)
+def print_plan(
+    name: str, runs: List[PhaseRun], gpu: str, folders: PhaseFolders
+) -> None:
+    """The set's size and the estimate for the runs still to do."""
+    todo = [run for run in runs if finished_dir(run, folders) is None]
+    finished = len(runs) - len(todo)
+    estimate = estimate_phase(todo, gpu)
     print("%s: %d runs, %d already have a record." % (name, len(runs), finished))
     print("Estimate on %s: %.1f h, about %.1f units (longest run %.1f h)." % (
         gpu, estimate.hours, estimate.units, estimate.longest_run_hours))  # fmt: skip
@@ -182,20 +221,21 @@ def run_set(arguments: argparse.Namespace) -> None:
     for old in supersede_other_budget_records(runs, folders.records):
         print("Superseded (different step budget):", old)
     context = make_context(arguments, folders)
-    finished = sum(is_finished(run, folders.records) for run in runs)
-    print_plan(arguments.set, runs, context.gpu, finished)
+    print_plan(arguments.set, runs, context.gpu, folders)
     for number, run in enumerate(runs, start=1):
-        if is_finished(run, folders.records):
-            print(
-                "[%d/%d] %s: record exists, skipping" % (number, len(runs), run.run_id)
-            )
+        found = finished_dir(run, folders)
+        if found is not None:
+            print("[%d/%d] %s: finished record in %s, skipping" % (
+                number, len(runs), run.run_id, found.parent.name))  # fmt: skip
             continue
         run_one(run, number, len(runs), context)
         for scratch, finetune in pairs([run] + runs):
             if run in (scratch, finetune):
-                check_pair(scratch, finetune, folders.records)
+                check_pair(
+                    scratch, finetune, folders.records, reuse_dir=folders.reuse_records
+                )
     for scratch, finetune in pairs(runs):  # pairs finished in an earlier session
-        check_pair(scratch, finetune, folders.records, quiet=True)
+        check_pair(scratch, finetune, folders.records, True, folders.reuse_records)
     print("\nDone. Units spent this session: %.2f" % context.ledger.total_units)
 
 
