@@ -131,7 +131,16 @@ Units are run time x the L4 rate (1.94 units per hour) from each record. One see
 
 - **Zero-shot does not work.** The HI-Small model scored on LI-Small finds 56% of laundering but raises 293,581 alerts (precision 0.15%). The two datasets differ too much for the model to be used as it is; only fine-tuning transfers anything.
 - **Scratch needed more steps.** At budget 20, scratch rises from 20.5% to 31.5% F1 and its best epoch moves from 7 to 16. Fine-tune moves less (33.1% to 34.9%) and peaks at epoch 10. The 100% gap shrinks from 12.6 to 3.4 F1 points, so the pilot's large gap was partly a short budget. Still one seed.
-- **Validation curves are missing for Phase A.** A bug read the Multi-GNN log before training wrote it, so `validation_curve` is empty in both records. It is fixed for new runs; for these two, `python -m src.export_curves` on the Drive logs rebuilds them without touching the records. The plateau epoch is therefore not yet measured; only the best epochs above are.
+- **Plateau (validation, Phase A).** Plateau = first epoch whose validation F1 is within 0.01 of the run's best. This is Multi-GNN's own argmax F1 on the LI-Small validation period, not the threshold-tuned F1 in the table.
+
+| Arm | Best validation epoch (F1) | Plateau epoch |
+| --- | --- | --- |
+| Trained from scratch | 16 (22.5%) | 11 |
+| Pre-trained, then fine-tuned | 10 (27.2%) | 10 |
+
+![Validation F1 per epoch, Phase A](results/phases/phaseA/val_curves_gin.png)
+
+Neither arm improves after epoch 16, and both best epochs fall inside 16. Validation F1 swings by 10 points or more from one epoch to the next (fine-tune drops to 8.2% at epoch 9 and 9.9% at epoch 17), so the plateau epoch is a rough guide from one seed. Phase C at budget 16 is the cheaper choice and covers both best epochs; budget 20 costs about 2 more units but lets Phase C reuse the two Phase A runs.
 
 ### Phases A to D
 
