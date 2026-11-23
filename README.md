@@ -2,7 +2,7 @@
 
 Does pre-training a graph neural network on synthetic AML data reduce how many labelled laundering cases a bank needs?
 
-**Status: pilot, Phase B and Phase A done (one seed, GIN only); Phases C and D are built and tested, not yet run.** The numbers below are a first look, not the answer to RQ2.
+**Status: pilot, Phases B, A and C done (GIN only, two seeds in Phase C); Phase D (PNA) is built and tested, not yet run.** Phase C is the first answer to RQ2, with only two seeds.
 
 Docs: [PRD](PRD.md) · [Architecture](ARCHITECTURE.md) · [Design system](DESIGN_SYSTEM.md) · [Agent instructions](AGENTS.md)
 
@@ -88,6 +88,35 @@ These come from the first four pilot runs (seed 0, 3-epoch budget, since superse
 If a pilot run's step budget changes, records and models made at the old budget are moved to `superseded/` folders, not overwritten or deleted, and those runs are done again.
 
 ## Results
+
+### Phase C (GIN, 10/25/100% of labels, seeds 0 and 1, budget 20)
+
+Pre-training on HI-Small gave a higher test minority F1 than training from scratch at all three label shares. At 10% of the labels the fine-tuned model scored 29.8 against 17.1, and its 10% score is above the 26.88 that Egressy et al. (2024) report for Multi-GIN + EU on LI-Small (their number, not ours). Only two seeds were run, so the spread below is a rough guide.
+
+![Minority F1 against share of labels, Phase C](results/phases/phaseC/label_scarcity_f1.png)
+
+![PR-AUC against share of labels, Phase C](results/phases/phaseC/label_scarcity_pr_auc.png)
+
+Test period of LI-Small, mean ± standard deviation over 2 seeds, equal gradient steps in every pair (10,840 to 11,000), same kept labels for both systems at each share and seed. F1 and recall are test values; the threshold comes from validation.
+
+| Labels | System | Minority F1 | PR-AUC | Precision@100 | Recall@10k |
+| --- | --- | --- | --- | --- | --- |
+| 10% | From scratch | 17.1 ± 1.9% | 0.106 ± 0.033 | 0.44 ± 0.07 | 43.6 ± 12.2% |
+| 10% | Pre-trained, fine-tuned | 29.8 ± 1.0% | 0.263 ± 0.020 | 0.92 ± 0.01 | 54.6 ± 3.6% |
+| 25% | From scratch | 20.4 ± 2.4% | 0.164 ± 0.061 | 0.66 ± 0.22 | 49.8 ± 0.6% |
+| 25% | Pre-trained, fine-tuned | 29.6 ± 5.7% | 0.271 ± 0.032 | 0.91 ± 0.01 | 58.5 ± 3.8% |
+| 100% | From scratch | 25.1 ± 9.1% | 0.194 ± 0.057 | 0.76 ± 0.16 | 41.5 ± 0.0% |
+| 100% | Pre-trained, fine-tuned | 34.6 ± 0.4% | 0.295 ± 0.008 | 0.97 ± 0.03 | 58.8 ± 0.1% |
+
+Per-seed minority F1 (%): 10% scratch 15.8 and 18.5, fine-tuned 30.5 and 29.1; 25% scratch 18.7 and 22.1, fine-tuned 33.6 and 25.6; 100% scratch 31.5 and 18.7, fine-tuned 34.9 and 34.4. The 100% runs for seed 0 are the Phase A runs (`_b20`), reused.
+
+What this does and does not show:
+- **Fine-tuning is higher in every pair of runs** (same seed, same labels), and the gaps at 10% and 25% are larger than the spread. This is two seeds on one dataset pair of synthetic data, so it is not a statistical test.
+- **The 100% gap rests on one unstable scratch run.** Scratch scored 31.5 at seed 0 and 18.7 at seed 1, so its whisker touches the fine-tuned mean. We do not call the 100% gap a clear win.
+- **Fine-tuned F1 does not fall with fewer labels here** (29.8 at 10%, 29.6 at 25%), but 10% to 25% is inside the 25% spread (5.7). We have not shown that 10% of the labels is enough.
+- **One source model.** Every fine-tune starts from the same HI-Small model, so pre-training variance is not in the spread.
+- **Test F1 and validation F1 differ.** The table is test. Validation F1 (threshold chosen there) is in `results/summary.csv` as `val_minority_f1`, and the two differ in both directions: validation is higher than test for most scratch runs and lower for most fine-tuned runs.
+- **Validation curves for Phase C are not shown.** Five of the ten records hold more curve points than their run had validations (the Multi-GNN log of an interrupted run was read whole), so the curves are not reliable and the chart is left out.
 
 ### Pilot (GIN, one seed): a first look, not a result
 

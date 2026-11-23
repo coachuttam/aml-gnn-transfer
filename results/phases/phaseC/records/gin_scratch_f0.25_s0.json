@@ -1,0 +1,199 @@
+{
+  "run_id": "gin_scratch_f0.25_s0",
+  "model": "gin",
+  "mode": "scratch",
+  "fraction": 0.25,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": 20,
+    "epochs_requested": 80,
+    "validations": 20,
+    "steps_per_epoch": 136,
+    "gradient_steps": 10880,
+    "environment": "env.yml / NVIDIA L4",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 10002.326488733292,
+    "scoring_seconds": 180.50443935394287,
+    "multignn_settings": {
+      "lr": 0.006213266113989207,
+      "w_ce1": 1.0000182882773443,
+      "w_ce2": 6.275014431494497,
+      "dropout": 0.00983468338330501,
+      "final_dropout": 0.10527690625126304,
+      "n_hidden": 66.00315515631006
+    },
+    "stock_training_loop": false,
+    "checkpoint_run_id": "gin_scratch_f0.25_s0",
+    "fine_tuned_from": null,
+    "train_transactions": 4432934,
+    "labels_kept": 1108234,
+    "laundering_labels_kept": 492,
+    "kept_labels_fingerprint": "a9524a4e6ddbc9ea",
+    "label_mask_seed": 0,
+    "checkpoint_is_last_epoch": false,
+    "validation_curve": [
+      [
+        4,
+        0.0
+      ],
+      [
+        8,
+        0.0
+      ],
+      [
+        12,
+        0.0
+      ],
+      [
+        16,
+        0.0
+      ],
+      [
+        20,
+        0.0
+      ],
+      [
+        24,
+        0.0
+      ],
+      [
+        28,
+        0.1718
+      ],
+      [
+        32,
+        0.1376
+      ],
+      [
+        36,
+        0.1935
+      ],
+      [
+        40,
+        0.1798
+      ],
+      [
+        44,
+        0.0328
+      ],
+      [
+        48,
+        0.0
+      ],
+      [
+        52,
+        0.1451
+      ],
+      [
+        56,
+        0.0
+      ],
+      [
+        60,
+        0.1601
+      ],
+      [
+        64,
+        0.0
+      ],
+      [
+        68,
+        0.1262
+      ],
+      [
+        72,
+        0.2041
+      ],
+      [
+        76,
+        0.143
+      ],
+      [
+        80,
+        0.1659
+      ],
+      [
+        84,
+        0.0026
+      ],
+      [
+        88,
+        0.1606
+      ],
+      [
+        92,
+        0.1267
+      ],
+      [
+        96,
+        0.177
+      ],
+      [
+        100,
+        0.1713
+      ],
+      [
+        104,
+        0.2007
+      ],
+      [
+        108,
+        0.143
+      ],
+      [
+        112,
+        0.1674
+      ],
+      [
+        116,
+        0.1786
+      ],
+      [
+        120,
+        0.1758
+      ],
+      [
+        124,
+        0.1469
+      ]
+    ]
+  },
+  "ours_commit": "6289a47b1be03dd41131b5db2533a01e00ee2376",
+  "multignn_commit": "252b0252afca109d1d216c411c59ff70753b25fc",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.18747056052755534,
+      "precision": 0.1506434519303558,
+      "recall": 0.24812967581047382,
+      "pr_auc": 0.12152896709394888,
+      "precision_at_100": 0.5,
+      "alerts": 1321,
+      "threshold": 0.4343979060649872,
+      "recall_at_alert_budget": {
+        "10000": 0.4937655860349127,
+        "25000": 0.5910224438902744,
+        "50000": 0.7231920199501247
+      }
+    },
+    "validation": {
+      "minority_f1": 0.22570532915360503,
+      "precision": 0.2845849802371542,
+      "recall": 0.18701298701298702,
+      "pr_auc": 0.1452538281120125,
+      "precision_at_100": 0.64,
+      "alerts": 506,
+      "threshold": 0.4343979060649872,
+      "recall_at_alert_budget": {
+        "10000": 0.5285714285714286,
+        "25000": 0.6649350649350649,
+        "50000": 0.7194805194805195
+      }
+    }
+  },
+  "epochs_trained": 80,
+  "best_epoch": 28,
+  "runtime_seconds": 10182.830928087234
+}
