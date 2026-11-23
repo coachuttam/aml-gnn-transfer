@@ -174,6 +174,12 @@ PHASE_C_SEEDS: Tuple[int, ...] = (0, 1)
 
 # Phase D: Multi-PNA + EU. One seed by default because PNA is slower than GIN;
 # more seeds can be passed to src.run_phase with --seeds.
+# Phase D budget: 16 = where Phase A's validation curves peaked for GIN (best epochs
+# 10 and 16). PNA is not measured yet; the first PNA run's real time replaces the
+# ASSUMED_PNA_TIME_VS_GIN estimate. Phase D refuses to start if this is None.
+BUDGET_D: Optional[int] = 16
+# Same three label shares as Phase C, to fit the 70 Colab units left.
+PHASE_D_FRACTIONS: Tuple[float, ...] = (0.10, 0.25, 1.00)
 PHASE_D_SEEDS: Tuple[int, ...] = (0,)
 # The PNA source model trains on HI-Small for as many epochs as the GIN one did.
 PHASE_D_SOURCE_EPOCHS = PILOT_SOURCE_EPOCHS

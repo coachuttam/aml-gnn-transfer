@@ -330,3 +330,23 @@ def test_the_title_says_pre_training_helps_most_when_labels_are_scarce() -> None
             records.append(make_record("scratch", fraction, 0.2 + wobble, seed))
             records.append(make_record("finetune", fraction, 0.2 + gap + wobble, seed))
     assert title_for(records) == "Pre-training helps most when labels are scarce"
+
+
+def test_every_panel_of_the_curve_chart_shares_a_y_axis_that_reaches_the_highest_point(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import matplotlib.pyplot as plt
+
+    from src import plot_curves
+
+    saved = {}
+    monkeypatch.setattr(
+        plt.Figure, "savefig", lambda self, path, **k: saved.update(figure=self)
+    )
+    records_dir = tmp_path / "records"
+    low = make_record("scratch", 0.1, 0.2, validation_curve=[[1, 0.10]])
+    high = make_record("finetune", 1.0, 0.3, validation_curve=[[1, 0.40]])
+    for record in (low, high):
+        write_record(record, records_dir)
+    plot_curves.draw_curves(records_dir, tmp_path)
+    assert saved["figure"].axes[0].get_ylim()[1] >= 40

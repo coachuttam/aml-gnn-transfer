@@ -79,14 +79,14 @@ phaseC:
   source_folder: pilot/models
 
 phaseD:
-  description: "PNA: train the HI-Small source model, then the same grid as phase C"
+  description: "PNA: train the HI-Small source model, then the phase C fractions at BUDGET_D, seed 0"
   model: pna
   source_epochs: $PHASE_D_SOURCE_EPOCHS
   zero_shot: false
   arms: [scratch, finetune]
-  fractions: $LABEL_FRACTIONS
+  fractions: $PHASE_D_FRACTIONS
   seeds: $PHASE_D_SEEDS
-  budget: $BUDGET_C
+  budget: $BUDGET_D
   suffix_budget: false
   source_seed: 0
   records_folder: phaseD/records

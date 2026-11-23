@@ -59,8 +59,10 @@ def test_run_counts_per_phase() -> None:
     assert (
         len(phase_runs("phaseC", budget=EXAMPLE_BUDGET)) == 12
     )  # 3 fractions x 2 arms x 2 seeds
-    assert len(phase_runs("phaseD", budget=EXAMPLE_BUDGET)) == 1 + 8  # source + 4 x 2
-    assert len(phase_runs("phaseD", seeds=[0, 1, 2], budget=EXAMPLE_BUDGET)) == 25
+    assert (
+        len(phase_runs("phaseD", budget=EXAMPLE_BUDGET)) == 1 + 6
+    )  # source + 3 fractions x 2 arms
+    assert len(phase_runs("phaseD", seeds=[0, 1, 2], budget=EXAMPLE_BUDGET)) == 1 + 18
 
 
 def test_phase_c_covers_every_fraction_arm_and_seed_once() -> None:
@@ -73,8 +75,9 @@ def test_phase_c_covers_every_fraction_arm_and_seed_once() -> None:
 
 def test_phase_c_and_d_refuse_to_start_while_the_budget_is_not_set(monkeypatch) -> None:
     monkeypatch.setattr(config, "BUDGET_C", None)
+    monkeypatch.setattr(config, "BUDGET_D", None)
     for name in ("phaseC", "phaseD"):
-        with pytest.raises(ValueError, match="BUDGET_C"):
+        with pytest.raises(ValueError, match="BUDGET_"):
             phase_runs(name)
 
 
@@ -87,7 +90,7 @@ def test_phase_d_trains_the_pna_source_model_first_then_the_same_grid() -> None:
     runs = phase_runs("phaseD", budget=EXAMPLE_BUDGET)
     assert runs[0].run_id == "pna_source_f1.0_s0"
     assert {r.model for r in runs} == {"pna"}
-    assert {r.fraction for r in runs[1:]} == set(config.LABEL_FRACTIONS)
+    assert {r.fraction for r in runs[1:]} == set(config.PHASE_D_FRACTIONS)
     assert {r.seed for r in runs} == {0}  # default: one seed
 
 
@@ -145,3 +148,13 @@ def test_phases_that_start_from_the_pilot_source_look_for_it_in_the_pilot_folder
 def test_each_phase_keeps_its_own_records_folder() -> None:
     folders = {phase_folders(n, config.PROJECT_ROOT).records for n in phase_names()}
     assert len(folders) == len(phase_names())
+
+
+def test_phase_d_uses_its_own_budget_and_leaves_phase_cs_alone(monkeypatch) -> None:
+    monkeypatch.setattr(config, "BUDGET_C", 20)
+    monkeypatch.setattr(config, "BUDGET_D", 16)
+    d_runs = phase_runs("phaseD")
+    assert {r.step_budget_epochs for r in d_runs if r.mode != "source"} == {16}
+    assert {r.step_budget_epochs for r in phase_runs("phaseC")} == {20}
+    assert len(d_runs) == 7 and {r.seed for r in d_runs} == {0}
+    assert {r.fraction for r in d_runs if r.mode != "source"} == {0.1, 0.25, 1.0}

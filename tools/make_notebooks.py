@@ -241,7 +241,7 @@ Pick `RUN_SET` in the first cell:
 | `phaseB` | zero-shot: the pilot's GIN source model scored on LI-Small test, no training |
 | `phaseA` | GIN at 100% labels, 20-epoch budget, scratch and fine-tune (ids end `_b20`) |
 | `phaseC` | GIN grid: `PHASE_C_FRACTIONS` x 2 setups x `PHASE_C_SEEDS` (10/25/100%, seeds 0 and 1); needs `BUDGET_C` in `src/config.py`; reuses pilot (budget 8) or Phase A (budget 20) runs |
-| `phaseD` | PNA: trains its HI-Small source model, then the same grid; needs `BUDGET_C` |
+| `phaseD` | PNA: trains its HI-Small source model, then 10/25/100% x 2 setups, seed 0, at `BUDGET_D` (16); each comparison run is expected to pass 3 h, so it needs `ALLOW_LONG_RUNS = True` |
 | `export_curves` | no GPU: rebuilds validation curves for the pilot, Phase A and Phase C from their Multi-GNN logs on Drive, into `<set>/curves/` for `pilot`, `phaseA` and `phaseC` |
 
 Each run prints an estimate before it starts, then its real minutes and Colab units with a running total.

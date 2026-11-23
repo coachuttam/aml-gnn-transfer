@@ -2,7 +2,7 @@
 
 Does pre-training a graph neural network on synthetic AML data reduce how many labelled laundering cases a bank needs?
 
-**Status: pilot, Phases B, A and C done (GIN only, two seeds in Phase C); Phase D (PNA) is built and tested, not yet run.** Phase C is the first answer to RQ2, with only two seeds.
+**Status: pilot, Phases B, A and C done (GIN only, two seeds in Phase C); Phase D (PNA, seed 0, budget 16) is set up, not yet run.** Phase C is the first answer to RQ2, with only two seeds.
 
 Docs: [PRD](PRD.md) · [Architecture](ARCHITECTURE.md) · [Design system](DESIGN_SYSTEM.md) · [Agent instructions](AGENTS.md)
 
@@ -116,7 +116,9 @@ What this does and does not show:
 - **Fine-tuned F1 does not fall with fewer labels here** (29.8 at 10%, 29.6 at 25%), but 10% to 25% is inside the 25% spread (5.7). We have not shown that 10% of the labels is enough.
 - **One source model.** Every fine-tune starts from the same HI-Small model, so pre-training variance is not in the spread.
 - **Test F1 and validation F1 differ.** The table is test. Validation F1 (threshold chosen there) is in `results/summary.csv` as `val_minority_f1`, and the two differ in both directions: validation is higher than test for most scratch runs and lower for most fine-tuned runs.
-- **Validation curves for Phase C are not shown yet.** Five of the ten records hold more curve points than their run had validations (the log of an interrupted run was read whole). The reader is fixed (it keeps only the finished run's epochs); run `RUN_SET = "export_curves"` to rebuild the curves from the Drive logs, and the chart can then be added.
+- **Validation is noisy.** The chart below shows Multi-GNN's own validation F1 for every Phase C run (one line per seed). It swings by 10 points or more between epochs, and some runs fall to 0 after a good start: scratch at 100% (seed 1) is at 0 from epoch 9 on, and fine-tune at 25% (seed 1) is at 0 from epoch 28 to 76. The records score the best saved checkpoint (scratch 100% seed 1: epoch 7), so the table is not hit, but this explains the wide scratch spread.
+
+![Validation F1 per epoch, Phase C](results/phases/phaseC/val_curves_gin.png)
 
 ### Pilot (GIN, one seed): a first look, not a result
 
@@ -181,9 +183,11 @@ All run from `notebooks/colab_runner.ipynb` by setting `RUN_SET` in its first ce
 | `phaseA` (done) | GIN, 100% labels, scratch and fine-tune, budget 20, every epoch validated (ids end `_b20`; the pilot is not touched) | 2 |
 | `phaseC` | GIN, fractions in `PHASE_C_FRACTIONS` (10/25/100%) x scratch/fine-tune x seeds in `PHASE_C_SEEDS` (0, 1), nested label masks, at `BUDGET_C`. Finished pilot runs (budget 8) or Phase A runs (budget 20) are reused when `BUDGET_C` matches, not re-run | 12 (6 to run at budget 8, 12 at 16, 10 at 20) |
 | `export_curves` | No GPU: rebuilds the validation curves of the pilot and Phase A from their Multi-GNN logs on Drive, into `pilot/curves/` and `phaseA/curves/` | 0 |
-| `phaseD` | Train `pna_source_f1.0_s0` on HI-Small (Multi-PNA + EU), then the Phase C grid with PNA; seeds in `PHASE_D_SEEDS` (default 0) | 9 |
+| `phaseD` | Train `pna_source_f1.0_s0` on HI-Small (Multi-PNA + EU, 10 epochs), then 10/25/100% x scratch/fine-tune with PNA at `BUDGET_D` (16), seed 0 (`PHASE_D_FRACTIONS`, `PHASE_D_SEEDS`) | 7 |
 
 `BUDGET_C` is 20 (set after reading Phase A); Phases C and D refuse to start without it. Every run prints an estimate, then its real minutes and Colab units with a running total, and a run expected to pass 3 GPU hours stops unless the owner has approved it (`ALLOW_LONG_RUNS`). A finished run (record with status `completed` or `no_improvement`) is skipped on a re-run, and each finished scratch/fine-tune pair is checked for identical kept labels and equal gradient steps.
+
+Phase D estimate (L4, 1.94 units/h; PNA time is assumed 1.5x GIN, not measured): PNA source about 1.6 h (3.2 units); each of the six comparison runs about 3.5 h (6.8 units), so each needs `ALLOW_LONG_RUNS`; total about 22.7 h and 44 units. If PNA is 2x GIN the total is about 59 units. The first PNA run's real time replaces the assumption.
 
 Tables and charts for any set: `python -m src.collect` then `python -m src.plot --run-set phaseC` (mean ± standard deviation over seeds, one panel per model, plus validation curves for runs that have them).
 

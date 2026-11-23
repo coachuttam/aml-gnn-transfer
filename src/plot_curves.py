@@ -64,10 +64,13 @@ def draw_model(model: str, groups: Dict, path: Path) -> None:
         squeeze=False,
         facecolor="white",
     )
+    highest = 0.0
     for axis, fraction in zip(axes[0], fractions):
         for record, curve in groups[(model, fraction)]:
             xs, ys = [p[0] for p in curve], [100 * p[1] for p in curve]
-            label = SYSTEM_NAMES[record.mode] + " (seed %d)" % record.seed
+            highest = max(highest, max(ys))
+            # One legend entry per system: every seed has its own line.
+            label = SYSTEM_NAMES[record.mode] if fraction == fractions[-1] else None
             axis.plot(
                 xs, ys, marker="o", color=COLOURS[record.mode], alpha=0.8, label=label
             )
@@ -75,12 +78,15 @@ def draw_model(model: str, groups: Dict, path: Path) -> None:
             "%.0f%% of labels" % (100 * fraction), loc="left", color=TEXT_COLOUR
         )
         axis.set_xlabel("Epoch", color=TEXT_COLOUR)
-        axis.set_ylim(bottom=0)
         axis.grid(axis="y", color="#e5e7eb")
+    # Set once for every panel: a limit set inside the loop clipped later panels.
+    axes[0][0].set_ylim(0, highest * 1.08)
     axes[0][0].set_ylabel(
         "Validation minority F1 (%), Multi-GNN's own log", color=TEXT_COLOUR
     )
-    axes[0][-1].legend(frameon=False, fontsize=9)
+    handles, names = axes[0][-1].get_legend_handles_labels()
+    unique = dict(zip(names, handles))
+    axes[0][-1].legend(unique.values(), unique.keys(), frameon=False, fontsize=9)
     figure.suptitle(
         "Validation F1 per validated epoch, every run (%s)" % model,
         x=0.06,
@@ -91,7 +97,8 @@ def draw_model(model: str, groups: Dict, path: Path) -> None:
     figure.text(
         0.06,
         0.02,
-        "Only validated epochs have a point. IBM AML (synthetic), LI-Small validation.",
+        "One line per seed. Only validated epochs have a point. "
+        "IBM AML (synthetic), LI-Small validation.",
         fontsize=10,
         color="#6b7280",
     )

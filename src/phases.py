@@ -134,8 +134,8 @@ def require_budget(name: str, budget: Optional[int]) -> int:
     """Stop with a clear message if the budget has not been set yet."""
     if budget is None:
         raise ValueError(
-            "%s needs a step budget and none is set. Set BUDGET_C in src/config.py "
-            "after reading Phase A, then run again." % name
+            "%s needs a step budget and none is set. Set BUDGET_C (Phase C) "
+            "or BUDGET_D (Phase D) in src/config.py, then run again." % name
         )
     return int(budget)
 
