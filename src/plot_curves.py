@@ -27,14 +27,15 @@ CURVES_FOLDER = "curves"
 
 
 def curve_for(record: RunRecord, records_dir: Path) -> Optional[List[List[float]]]:
-    """[epoch, F1] points from the record, else from the exported side file."""
-    curve = record.config.get("validation_curve")
-    if curve:
-        return curve
+    """[epoch, F1] points from the exported side file, else from the record.
+
+    The side file wins: it is rebuilt with the log fix, while a record written
+    before that fix can hold the points of earlier, interrupted attempts.
+    """
     side_file = records_dir.parent / CURVES_FOLDER / (record.run_id + ".json")
     if side_file.exists():
         return json.loads(side_file.read_text())
-    return None
+    return record.config.get("validation_curve") or None
 
 
 def curves_by_fraction(

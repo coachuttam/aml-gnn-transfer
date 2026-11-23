@@ -18,7 +18,7 @@ Example:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import List, Optional
 
@@ -74,23 +74,42 @@ def multignn_best_epoch(epochs: List[EpochScores]) -> EpochScores:
     return chosen
 
 
-def validation_curve(epochs: List[EpochScores]) -> List[List[float]]:
+def validation_curve(
+    epochs: List[EpochScores],
+    epochs_run: Optional[int] = None,
+    validations: Optional[int] = None,
+) -> List[List[float]]:
     """[epoch, validation F1] for every epoch that was really validated.
 
     Epochs count from 1, like `best_epoch` in a run record. Epochs the wrapper
     skipped ("not scored") are left out. This is Multi-GNN's own F1 (argmax), a
     progress curve, not the threshold-tuned F1 the record scores.
+
+    A log can hold earlier, interrupted attempts of the same run, and the one
+    that finished is last. So keep only the last `epochs_run` epochs (renumbered
+    from 1) and then at most the last `validations` points.
     """
-    return [
+    if epochs_run:
+        epochs = [
+            replace(scores, epoch=number)
+            for number, scores in enumerate(epochs[-epochs_run:])
+        ]
+    points = [
         [scores.epoch + 1, scores.validation_f1]
         for scores in epochs
         if scores.validation_f1 is not None
     ]
+    return points[-validations:] if validations else points
 
 
-def read_validation_curve(run_folder: Path) -> List[List[float]]:
+def read_validation_curve(
+    run_folder: Path,
+    epochs_run: Optional[int] = None,
+    validations: Optional[int] = None,
+) -> List[List[float]]:
     """The curve from `<run folder>/logs/logs.log`; empty if there is no log."""
     log_file = run_folder / "logs" / "logs.log"
     if not log_file.exists():
         return []
-    return validation_curve(parse_epoch_scores(log_file.read_text()))
+    scores = parse_epoch_scores(log_file.read_text())
+    return validation_curve(scores, epochs_run, validations)

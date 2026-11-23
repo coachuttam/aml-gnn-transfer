@@ -269,7 +269,7 @@ def test_the_validation_curve_is_read_after_training_has_written_the_log(
         lambda *a: order.append("train") or (None, 1.0, False),
     )
     monkeypatch.setattr(
-        module, "read_validation_curve", lambda p: order.append("curve") or [[1, 0.2]]
+        module, "read_validation_curve", lambda *a: order.append("curve") or [[1, 0.2]]
     )
     monkeypatch.setattr(module, "has_checkpoint", lambda p: True)
     monkeypatch.setattr(module, "score_checkpoint", lambda r: None)

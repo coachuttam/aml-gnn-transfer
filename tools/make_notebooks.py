@@ -205,8 +205,8 @@ run(f"{sys.executable} -m src.run_phase " + " ".join(words))
 """
 
 COLAB_EXPORT = r"""
-run(f"{sys.executable} -m src.export_curves --home {DRIVE} --sets pilot phaseA")
-run(f"ls {DRIVE}/pilot/curves {DRIVE}/phaseA/curves")
+run(f"{sys.executable} -m src.export_curves --home {DRIVE} --sets pilot phaseA phaseC")
+run(f"ls {DRIVE}/pilot/curves {DRIVE}/phaseA/curves {DRIVE}/phaseC/curves")
 """
 
 
@@ -242,7 +242,7 @@ Pick `RUN_SET` in the first cell:
 | `phaseA` | GIN at 100% labels, 20-epoch budget, scratch and fine-tune (ids end `_b20`) |
 | `phaseC` | GIN grid: `PHASE_C_FRACTIONS` x 2 setups x `PHASE_C_SEEDS` (10/25/100%, seeds 0 and 1); needs `BUDGET_C` in `src/config.py`; reuses pilot (budget 8) or Phase A (budget 20) runs |
 | `phaseD` | PNA: trains its HI-Small source model, then the same grid; needs `BUDGET_C` |
-| `export_curves` | no GPU: rebuilds validation curves for the pilot and Phase A from their Multi-GNN logs on Drive, into `pilot/curves/` and `phaseA/curves/` |
+| `export_curves` | no GPU: rebuilds validation curves for the pilot, Phase A and Phase C from their Multi-GNN logs on Drive, into `<set>/curves/` for `pilot`, `phaseA` and `phaseC` |
 
 Each run prints an estimate before it starts, then its real minutes and Colab units with a running total.
 A run expected to pass 3 GPU hours stops unless `ALLOW_LONG_RUNS = True` (AGENTS.md rule 6: ask the owner first).

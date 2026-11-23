@@ -76,6 +76,17 @@ def matched_pairs(by_model: Dict[str, StatsByArm]) -> List[Tuple[Stat, Stat]]:
     return pairs
 
 
+def largest_gap_at_fewest_labels(by_model: Dict[str, StatsByArm]) -> bool:
+    """True if, in every model, the fine-tune lead is biggest at the smallest share."""
+    for name, stats in by_model.items():
+        model_pairs = matched_pairs({name: stats})
+        ordered = sorted(model_pairs, key=lambda pair: pair[0].fraction)
+        gaps = [a.mean - b.mean for a, b in ordered]
+        if len(gaps) < 2 or gaps[0] <= max(gaps[1:]):
+            return False
+    return True
+
+
 def chart_title(by_model: Dict[str, StatsByArm], metric_name: str) -> str:
     """The finding in words. Never calls a gap inside the seed spread a win."""
     pairs = matched_pairs(by_model)
@@ -84,6 +95,10 @@ def chart_title(by_model: Dict[str, StatsByArm], metric_name: str) -> str:
     seeds = min(min(a.count, b.count) for a, b in pairs)
     if any(a.mean <= b.mean for a, b in pairs):
         return "Pre-training does not help at every label share (%s)" % metric_name
+    if all(gap_is_clear(a, b) for a, b in pairs) and largest_gap_at_fewest_labels(
+        by_model
+    ):
+        return "Pre-training helps most when labels are scarce"
     if all(gap_is_clear(a, b) for a, b in pairs):
         return "Pre-trained model beats scratch at every label share (%s, %d seeds)" % (
             metric_name, seeds)  # fmt: skip

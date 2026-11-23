@@ -102,3 +102,40 @@ def test_a_run_folder_without_a_log_has_an_empty_curve(tmp_path) -> None:
     from src.read_log import read_validation_curve
 
     assert read_validation_curve(tmp_path) == []
+
+
+def epoch_text(count: int, first_f1: float = 0.1) -> str:
+    """`count` logged epochs, every one validated, F1 rising by 0.01 each epoch."""
+    text = ""
+    for number in range(count):
+        text += "Train F1: 0.1\nValidation F1: %.4f\nTest F1: not scored\n" % (
+            first_f1 + 0.01 * number
+        )
+    return text
+
+
+def test_an_interrupted_attempt_before_the_finished_one_is_left_out_of_the_curve() -> (
+    None
+):
+    from src.read_log import validation_curve
+
+    # No second "Retrieving data" marker, as in the real Phase C logs.
+    log = "Retrieving data\n" + epoch_text(3, 0.9) + epoch_text(5, 0.1)
+    curve = validation_curve(parse_epoch_scores(log), epochs_run=5, validations=5)
+    assert [epoch for epoch, _ in curve] == [1, 2, 3, 4, 5]
+    assert curve[0][1] == 0.1 and curve[-1][1] == pytest.approx(0.14)
+
+
+def test_the_curve_never_has_more_points_than_the_run_had_validations() -> None:
+    from src.read_log import validation_curve
+
+    log = "Retrieving data\n" + epoch_text(10)
+    curve = validation_curve(parse_epoch_scores(log), validations=4)
+    assert len(curve) == 4 and curve[-1][0] == 10
+
+
+def test_without_limits_the_whole_log_is_the_curve() -> None:
+    from src.read_log import validation_curve
+
+    log = "Retrieving data\n" + epoch_text(3)
+    assert len(validation_curve(parse_epoch_scores(log))) == 3

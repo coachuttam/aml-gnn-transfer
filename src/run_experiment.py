@@ -166,7 +166,9 @@ def run_experiment(plan: RunPlan, environment: str, smoke_test: bool) -> Path:
             plan, run_folder, smoke_test
         )
         # Read the log only now: before training it does not exist yet.
-        extras["validation_curve"] = read_validation_curve(run_folder)
+        extras["validation_curve"] = read_validation_curve(
+            run_folder, plan.epochs, plan.validations
+        )
         if not has_checkpoint(plan):  # a result, not a crash: see experiment_record
             record = build_no_improvement_record(
                 plan, summary, training_seconds, environment, smoke_test,

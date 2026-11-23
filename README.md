@@ -91,7 +91,7 @@ If a pilot run's step budget changes, records and models made at the old budget 
 
 ### Phase C (GIN, 10/25/100% of labels, seeds 0 and 1, budget 20)
 
-Pre-training on HI-Small gave a higher test minority F1 than training from scratch at all three label shares. At 10% of the labels the fine-tuned model scored 29.8 against 17.1, and its 10% score is above the 26.88 that Egressy et al. (2024) report for Multi-GIN + EU on LI-Small (their number, not ours). Only two seeds were run, so the spread below is a rough guide.
+Pre-training helps most when labels are scarce: it gave a higher test minority F1 than training from scratch at all three label shares, and the gap is largest at 10% of the labels (12.7 points, against 9.2 at 25% and 9.5 at 100%, where the 100% gap is within the scratch spread). At 10% of the labels the fine-tuned model scored 29.8 against 17.1, and its 10% score is above the 26.88 that Egressy et al. (2024) report for Multi-GIN + EU on LI-Small (their number, not ours). Only two seeds were run, so the spread below is a rough guide.
 
 ![Minority F1 against share of labels, Phase C](results/phases/phaseC/label_scarcity_f1.png)
 
@@ -116,7 +116,7 @@ What this does and does not show:
 - **Fine-tuned F1 does not fall with fewer labels here** (29.8 at 10%, 29.6 at 25%), but 10% to 25% is inside the 25% spread (5.7). We have not shown that 10% of the labels is enough.
 - **One source model.** Every fine-tune starts from the same HI-Small model, so pre-training variance is not in the spread.
 - **Test F1 and validation F1 differ.** The table is test. Validation F1 (threshold chosen there) is in `results/summary.csv` as `val_minority_f1`, and the two differ in both directions: validation is higher than test for most scratch runs and lower for most fine-tuned runs.
-- **Validation curves for Phase C are not shown.** Five of the ten records hold more curve points than their run had validations (the Multi-GNN log of an interrupted run was read whole), so the curves are not reliable and the chart is left out.
+- **Validation curves for Phase C are not shown yet.** Five of the ten records hold more curve points than their run had validations (the log of an interrupted run was read whole). The reader is fixed (it keeps only the finished run's epochs); run `RUN_SET = "export_curves"` to rebuild the curves from the Drive logs, and the chart can then be added.
 
 ### Pilot (GIN, one seed): a first look, not a result
 

@@ -294,3 +294,39 @@ def test_export_sets_writes_curves_next_to_each_sets_records(tmp_path: Path) -> 
     written = export_sets(tmp_path, ["phaseA"])
     assert written == [tmp_path / "phaseA" / "curves" / (record.run_id + ".json")]
     assert json.loads(written[0].read_text()) == [[1, 0.2]]
+
+
+def test_the_exported_curve_is_used_even_when_the_record_holds_a_longer_one(
+    tmp_path: Path,
+) -> None:
+    records_dir = tmp_path / "records"
+    record = make_record("scratch", 0.1, 0.2, validation_curve=[[1, 0.1], [90, 0.5]])
+    write_record(record, records_dir)
+    (tmp_path / "curves").mkdir()
+    (tmp_path / "curves" / (record.run_id + ".json")).write_text("[[1, 0.1]]")
+    assert curve_for(record, records_dir) == [[1, 0.1]]
+
+
+def test_the_exporter_reads_each_logs_last_epochs_and_validation_count(
+    tmp_path: Path,
+) -> None:
+    from src.export_curves import export_curves
+
+    record = make_record("scratch", 1.0, 0.3, epochs_requested=3, validations=3)
+    write_record(record, tmp_path / "records")
+    log = tmp_path / "runs" / record.run_id / "logs"
+    log.mkdir(parents=True)
+    old = "Train F1: 0.1\nValidation F1: 0.9\nTest F1: not scored\n" * 2
+    new = "Train F1: 0.1\nValidation F1: 0.2\nTest F1: not scored\n" * 3
+    (log / "logs.log").write_text("Retrieving data\n" + old + new)
+    path = export_curves(tmp_path / "runs", tmp_path / "records", tmp_path / "out")[0]
+    assert json.loads(path.read_text()) == [[1, 0.2], [2, 0.2], [3, 0.2]]
+
+
+def test_the_title_says_pre_training_helps_most_when_labels_are_scarce() -> None:
+    records = []
+    for seed, wobble in enumerate((0.0, 0.002)):
+        for fraction, gap in ((0.1, 0.15), (0.25, 0.08), (1.0, 0.09)):
+            records.append(make_record("scratch", fraction, 0.2 + wobble, seed))
+            records.append(make_record("finetune", fraction, 0.2 + gap + wobble, seed))
+    assert title_for(records) == "Pre-training helps most when labels are scarce"

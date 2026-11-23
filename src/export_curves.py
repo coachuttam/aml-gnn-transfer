@@ -10,7 +10,7 @@ logs live on Drive, so run it on Colab or copy the logs down first:
 On Colab (no GPU needed) the notebook's RUN_SET = "export_curves" does this for
 whole run sets, writing `<home>/<set>/curves/` next to `<home>/<set>/records/`:
 
-    python -m src.export_curves --home <Drive project folder> --sets pilot phaseA
+    python -m src.export_curves --home <Drive project folder> --sets pilot phaseA phaseC
 """
 
 from __future__ import annotations
@@ -25,13 +25,23 @@ from src.phases import phase_folders
 from src.read_log import read_validation_curve
 from src.records import read_all_records
 
+EXPORTED_SETS = [
+    "pilot",
+    "phaseA",
+    "phaseC",
+]  # runs whose records lack a trustworthy curve
+
 
 def export_curves(logs_root: Path, records_dir: Path, output_dir: Path) -> List[Path]:
     """One curve file per record whose log exists. Returns the files written."""
     output_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for record in read_all_records(records_dir):
-        curve = read_validation_curve(logs_root / record.run_id)
+        curve = read_validation_curve(
+            logs_root / record.run_id,
+            record.config.get("epochs_requested"),
+            record.config.get("validations"),
+        )
         if not curve:
             print("no log for %s, skipped" % record.run_id)
             continue
@@ -59,7 +69,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--records-dir", type=Path)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--home", type=Path, help="Project folder (Drive on Colab)")
-    parser.add_argument("--sets", nargs="+", default=["pilot", "phaseA"])
+    parser.add_argument("--sets", nargs="+", default=EXPORTED_SETS)
     arguments = parser.parse_args(argv)
     if arguments.home:
         files = export_sets(arguments.home, arguments.sets)
