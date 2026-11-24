@@ -1,0 +1,98 @@
+{
+  "run_id": "lightgbm_scratch_f0.25_s0",
+  "model": "lightgbm",
+  "mode": "scratch",
+  "fraction": 0.25,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": null,
+    "epochs_requested": 400,
+    "validations": null,
+    "steps_per_epoch": null,
+    "gradient_steps": null,
+    "environment": "local CPU (LightGBM 4.6.0)",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 6.89724588394165,
+    "scoring_seconds": 0.0,
+    "multignn_settings": null,
+    "stock_training_loop": false,
+    "checkpoint_run_id": null,
+    "fine_tuned_from": null,
+    "checkpoint_is_last_epoch": null,
+    "validation_curve": [],
+    "train_transactions": 4432934,
+    "labels_kept": 1108234,
+    "laundering_labels_kept": 492,
+    "kept_labels_fingerprint": "a9524a4e6ddbc9ea",
+    "label_mask_seed": 0,
+    "features": "Project 2 graph features (past only, no labels)",
+    "feature_names": [
+      "sender_sent_1h",
+      "sender_sent_24h",
+      "sender_sent_7d",
+      "receiver_received_1h",
+      "receiver_received_24h",
+      "receiver_received_7d",
+      "sender_out_degree",
+      "receiver_in_degree",
+      "sender_in_out_ratio",
+      "is_round_amount",
+      "is_very_round_amount",
+      "is_cross_bank",
+      "is_currency_change",
+      "log_amount_paid",
+      "payment_format_code",
+      "payment_currency_code"
+    ],
+    "class_weight": 1.0,
+    "validation_pr_auc_by_weight": {
+      "1.0": 0.046925406226369815,
+      "10.0": 0.0060968611426112365,
+      "balanced": 0.0028288082752594866
+    },
+    "lightgbm_settings": {
+      "max_trees": 400,
+      "learning_rate": 0.05,
+      "num_leaves": 7,
+      "random_state": 42
+    }
+  },
+  "ours_commit": "e8d879a85579254a98413d6c0850d54d9cd4a114",
+  "multignn_commit": "n/a (no Multi-GNN code used)",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.09977827050997784,
+      "precision": 0.08982035928143713,
+      "recall": 0.11221945137157108,
+      "pr_auc": 0.042251213896113554,
+      "precision_at_100": 0.23,
+      "alerts": 1002,
+      "threshold": 0.07430705667696631,
+      "recall_at_alert_budget": {
+        "10000": 0.4239401496259352,
+        "25000": 0.6234413965087282,
+        "50000": 0.7406483790523691
+      }
+    },
+    "validation": {
+      "minority_f1": 0.10428931875525652,
+      "precision": 0.14797136038186157,
+      "recall": 0.08051948051948052,
+      "pr_auc": 0.046925406226369815,
+      "precision_at_100": 0.33,
+      "alerts": 419,
+      "threshold": 0.07430705667696631,
+      "recall_at_alert_budget": {
+        "10000": 0.36103896103896105,
+        "25000": 0.5883116883116883,
+        "50000": 0.6571428571428571
+      }
+    }
+  },
+  "epochs_trained": 48,
+  "best_epoch": 48,
+  "runtime_seconds": 6.89724588394165
+}

@@ -2,7 +2,7 @@
 
 Does pre-training a graph neural network on synthetic AML data reduce how many labelled laundering cases a bank needs?
 
-**Status: pilot, Phases B, A and C done (GIN only, two seeds in Phase C); Phase D (PNA, seed 0, budget 16) is set up, not yet run.** Phase C is the first answer to RQ2, with only two seeds.
+**Status: pilot, Phases B, A, C and E done (GIN only, two seeds in Phase C; LightGBM simple baseline in Phase E); Phase D (PNA, seed 0, budget 16) is set up, not yet run.** Phase C is the first answer to RQ2, with only two seeds.
 
 Docs: [PRD](PRD.md) · [Architecture](ARCHITECTURE.md) · [Design system](DESIGN_SYSTEM.md) · [Agent instructions](AGENTS.md)
 
@@ -173,17 +173,35 @@ Units are run time x the L4 rate (1.94 units per hour) from each record. One see
 
 Neither arm improves after epoch 16, and both best epochs fall inside 16. Validation F1 swings by 10 points or more from one epoch to the next (fine-tune drops to 8.2% at epoch 9 and 9.9% at epoch 17), so the plateau epoch is a rough guide from one seed. Phase C at budget 16 is the cheaper choice and covers both best epochs; budget 20 costs about 2 more units but lets Phase C reuse the two Phase A runs.
 
-### Phase E (LightGBM baseline, built and tested, not yet run)
+### Phase E: LightGBM, a simple baseline (6 runs, seeds 0 and 1)
 
-LightGBM on Project 2's graph features, trained on the same kept labels as Phase C: fractions 10/25/100%, seeds 0 and 1, six runs, model `lightgbm`, run set `phaseE`. It runs on the laptop CPU and needs the raw `LI-Small_Trans.csv` (not in git).
+LightGBM scored well below both GNN setups at every label share, so it is labelled a **simple baseline**. It is not a tuned or competitive tabular model; it only shows what plain account-history features reach on the same kept labels.
 
-- **Same split and masks.** `src/lgbm_data.py` ports Multi-GNN's day split and IBM's row order; `src/label_mask.py` picks the kept labels. Each run's kept-label fingerprint is compared with the Phase C records and the run stops on a mismatch.
-- **Labels only from kept training rows.** The features come from timestamps, accounts, amounts and formats (past only), so no label reaches them. Class weight and early stopping use validation PR-AUC; the alert threshold comes from validation; test is scored once.
-- **Settings are Project 2's** (400 trees at most, 7 leaves, learning rate 0.05), not freshly tuned.
-- **Reason codes.** `python -m src.lgbm_explain` writes SHAP (TreeExplainer) top-5 reasons for the 100 highest-scored test alerts of the 10% seed 0 run, and a summary plot, to `results/phases/phaseE/`.
-- **Chart.** Once Phase E records exist, `python -m src.plot --run-set phaseC` adds a LightGBM line to the label-efficiency charts.
+| Labels | Minority F1 | PR-AUC | Precision@100 | Recall@10k |
+| --- | --- | --- | --- | --- |
+| 10% | 12.9 ± 2.4% | 0.070 ± 0.019 | 0.28 ± 0.30 | 48.1 ± 4.7% |
+| 25% | 15.4 ± 1.0% | 0.081 ± 0.004 | 0.32 ± 0.05 | 46.3 ± 1.9% |
+| 100% | 20.9 ± 1.0% | 0.117 ± 0.000 | 0.46 ± 0.04 | 54.7 ± 7.4% |
 
-To run: put `LI-Small_Trans.csv` in `data/Small_LI/` (copy it from Drive `aml-gnn-transfer/data/Small_LI/`, or `python -m src.download_data` with a Kaggle token), then `python -m src.lgbm_run`. On a Mac without Homebrew, LightGBM needs an OpenMP library; see the note under Quick start.
+Test period of LI-Small, mean ± standard deviation over 2 seeds (at 100% both seeds see the same labels, so their spread is small and says little). Same split and kept labels as Phase C (each run's kept-label fingerprint is checked against the Phase C records). For comparison, fine-tuned GIN reached 29.8 / 29.6 / 34.6% and scratch GIN 17.1 / 20.4 / 25.1% at the same shares (Phase C above). The chart above carries the LightGBM line.
+
+What was checked before reporting it:
+- **First version (Project 2's 16 features and settings):** test F1 was flat at about 0.12 and lowest at 100%. Early stopping mostly was not halting too early: with up to 2000 trees and patience 100 it stopped at the same tree at 10% and 25%, and validation PR-AUC peaks after 37 to 152 trees and then falls. At 100% more patience did help (37 to 268 trees, validation PR-AUC 0.037 to 0.051). The features were weak on LI-Small: the best single feature (7-day payments received) has a validation PR-AUC of 0.008 against a base rate of 0.0006, and most features are near 1x.
+- **Fix, chosen on validation only** (`python -m src.lgbm_tune`, table in `results/phases/phaseE/tuning_val.csv`, three cells: 10%, 25%, 100% at seed 0): mean validation PR-AUC went from 0.047 (first version) to 0.104. Most of the gain came from 13 extra past-only features (new counterparties in 24 h and 7 d, how many accounts the receiver pays on, account history and amount against the account's usual amount); more trees and patience alone gave 0.052, lower class weights 0.063, extra features alone 0.086, both together 0.104. Regularising (15 leaves, larger leaves, subsampling) did worse (0.069).
+- **Test was scored once per run, for the final settings only.** The first version's records are kept in `results/phases/phaseE/records/superseded/` and are not in the tables. We had seen the first version's test numbers before choosing to tune it, and nothing in the choice used test rows.
+
+| Validation, mean of the 3 cells | First version | Final |
+| --- | --- | --- |
+| PR-AUC | 0.047 | 0.104 |
+| Best F1 (tuned on validation, so optimistic) | 0.101 | 0.176 |
+
+Test F1 (mean over seeds) went from 12.2 / 12.4 / 11.6% to 12.9 / 15.4 / 20.9% at 10 / 25 / 100%, and now rises with the share of labels. At 10% the gain is within the seed spread.
+
+**Limits.** Features are still simple: 29 columns from timestamps, accounts, amounts and formats, with no graph embeddings. The settings were chosen from 7 candidates on 3 cells. LightGBM alone says nothing about whether a better tabular model could match the GNN.
+
+**SHAP.** `python -m src.lgbm_explain` writes the top-5 SHAP reasons for the 100 highest-scored test alerts of the 10% seed 0 run (`reason_codes_f0.1_s0.csv`) and a summary plot (`shap_summary_f0.1_s0.png`). The most common reasons are payment format, payments sent in 7 days and first-time pairs.
+
+To run: put `LI-Small_Trans.csv` in `data/Small_LI/` (copy it from Drive `aml-gnn-transfer/data/Small_LI/`, or `python -m src.download_data` with a Kaggle token), then `python -m src.lgbm_run` (add `--simple` for the first version). On a Mac without Homebrew, LightGBM needs an OpenMP library; see the note under Quick start.
 
 ### Phases A to D
 

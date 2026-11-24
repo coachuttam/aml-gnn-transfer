@@ -1,0 +1,122 @@
+{
+  "run_id": "lightgbm_scratch_f0.1_s0",
+  "model": "lightgbm",
+  "mode": "scratch",
+  "fraction": 0.1,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": null,
+    "epochs_requested": 2000,
+    "validations": null,
+    "steps_per_epoch": null,
+    "gradient_steps": null,
+    "environment": "local CPU (LightGBM 4.6.0)",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 39.90358209609985,
+    "scoring_seconds": 0.0,
+    "multignn_settings": null,
+    "stock_training_loop": false,
+    "checkpoint_run_id": null,
+    "fine_tuned_from": null,
+    "checkpoint_is_last_epoch": null,
+    "validation_curve": [],
+    "train_transactions": 4432934,
+    "labels_kept": 443293,
+    "laundering_labels_kept": 205,
+    "kept_labels_fingerprint": "bdbd2704e584f930",
+    "label_mask_seed": 0,
+    "features": "Project 2 graph features plus extra fan-in/out and 2-hop features",
+    "feature_names": [
+      "sender_sent_1h",
+      "sender_sent_24h",
+      "sender_sent_7d",
+      "receiver_received_1h",
+      "receiver_received_24h",
+      "receiver_received_7d",
+      "sender_out_degree",
+      "receiver_in_degree",
+      "sender_in_out_ratio",
+      "is_round_amount",
+      "is_very_round_amount",
+      "is_cross_bank",
+      "is_currency_change",
+      "log_amount_paid",
+      "payment_format_code",
+      "payment_currency_code",
+      "is_first_time_pair",
+      "sender_new_partners_24h",
+      "sender_new_partners_7d",
+      "receiver_new_senders_24h",
+      "receiver_new_senders_7d",
+      "receiver_out_degree",
+      "sender_in_degree",
+      "sender_transaction_count",
+      "receiver_transaction_count",
+      "sender_mean_amount_sent",
+      "receiver_mean_amount_received",
+      "amount_vs_sender_mean",
+      "amount_vs_receiver_mean"
+    ],
+    "class_weight": 0.5,
+    "validation_pr_auc_by_weight": {
+      "0.5": 0.08671338216614853,
+      "1.0": 0.05910290673104633,
+      "2.0": 0.047677751797722406,
+      "5.0": 0.033534347133723504
+    },
+    "lightgbm_settings": {
+      "max_trees": 2000,
+      "patience": 100,
+      "learning_rate": 0.05,
+      "leaves": 7,
+      "min_child_samples": 20,
+      "subsample": 1.0,
+      "column_share": 1.0,
+      "weights": [
+        0.5,
+        1.0,
+        2.0,
+        5.0
+      ],
+      "seed": 42
+    }
+  },
+  "ours_commit": "e8d879a85579254a98413d6c0850d54d9cd4a114+dirty",
+  "multignn_commit": "n/a (no Multi-GNN code used)",
+  "metrics": {
+    "validation": {
+      "minority_f1": 0.12931995540691194,
+      "precision": 0.4566929133858268,
+      "recall": 0.07532467532467532,
+      "pr_auc": 0.08671338216614853,
+      "precision_at_100": 0.55,
+      "alerts": 127,
+      "threshold": 0.3947199182396227,
+      "recall_at_alert_budget": {
+        "10000": 0.35064935064935066,
+        "25000": 0.5376623376623376,
+        "50000": 0.5753246753246753
+      }
+    },
+    "scored": {
+      "minority_f1": 0.1121121121121121,
+      "precision": 0.28426395939086296,
+      "recall": 0.06982543640897755,
+      "pr_auc": 0.08305653010068872,
+      "precision_at_100": 0.49,
+      "alerts": 197,
+      "threshold": 0.3947199182396227,
+      "recall_at_alert_budget": {
+        "10000": 0.4476309226932668,
+        "25000": 0.5910224438902744,
+        "50000": 0.6321695760598504
+      }
+    }
+  },
+  "epochs_trained": 23,
+  "best_epoch": 23,
+  "runtime_seconds": 39.90358209609985
+}

@@ -15,29 +15,28 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
-from sklearn.metrics import average_precision_score
 
 from src import config
 from src.label_mask import fingerprint, keep_label_positions
-from src.lgbm_inputs import LgbmInputs, load_inputs
-from src.metrics import best_f1_threshold, score_period, score_validation
+from src.lgbm_features import FEATURE_COLUMNS
+from src.lgbm_inputs import LgbmInputs, load_inputs, with_extra_features
+from src.lgbm_model import (  # noqa: F401  (re-exported for callers and tests)
+    DEFAULT_SETTINGS,
+    TUNED_SETTINGS,
+    FittedModel,
+    LightGbmSettings,
+    class_weight,
+    fit_best_weight,
+    fit_one_weight,
+    score_both_periods,
+)
 from src.records import RunRecord, git_commit, make_run_id, record_path, write_record
 
 LGBM_MODELS_FOLDER = "lightgbm_models"  # under the data root, never in git
-
-
-@dataclass(frozen=True)
-class FittedModel:
-    """The weight that won on validation PR-AUC and everything needed to score it."""
-
-    model: Any
-    weight: float
-    validation_pr_auc_by_weight: Dict[str, float]
 
 
 def kept_training_rows(train_end: int, fraction: float, seed: int) -> np.ndarray:
@@ -76,82 +75,19 @@ def assert_same_labels_as_phase_c(
     return mine
 
 
-def class_weight(weight: object, truth: np.ndarray) -> float:
-    """ "balanced" becomes negatives / positives among the training rows."""
-    if weight != "balanced":
-        return float(weight)  # type: ignore[arg-type]
-    positives = max(int(truth.sum()), 1)
-    return (len(truth) - positives) / positives
-
-
-def fit_one_weight(inputs: LgbmInputs, rows: np.ndarray, weight: float) -> Any:
-    """LightGBM on the kept rows; early stopping watches validation PR-AUC."""
-    import lightgbm
-
-    model = lightgbm.LGBMClassifier(
-        n_estimators=config.LIGHTGBM_MAX_TREES,
-        learning_rate=config.LIGHTGBM_LEARNING_RATE,
-        num_leaves=config.LIGHTGBM_LEAVES,
-        scale_pos_weight=weight,
-        random_state=config.LIGHTGBM_SEED,
-        verbose=-1,
-    )
-    validation = inputs.split.validation
-    model.fit(
-        inputs.features[rows],
-        inputs.truth[rows],
-        eval_set=[(inputs.features[validation], inputs.truth[validation])],
-        eval_metric="average_precision",
-        feature_name=inputs.names,
-        callbacks=[
-            lightgbm.early_stopping(
-                config.LIGHTGBM_EARLY_STOPPING_ROUNDS, verbose=False
-            )
-        ],
-    )
-    return model
-
-
-def fit_best_weight(inputs: LgbmInputs, rows: np.ndarray) -> FittedModel:
-    """Try each class weight; keep the one with the best validation PR-AUC."""
-    validation = inputs.split.validation
-    tried: Dict[str, float] = {}
-    best_pr_auc, best_model, best_weight = -1.0, None, 1.0
-    for candidate in config.LIGHTGBM_CANDIDATE_WEIGHTS:
-        weight = class_weight(candidate, inputs.truth[rows])
-        model = fit_one_weight(inputs, rows, weight)
-        scores = model.predict_proba(inputs.features[validation])[:, 1]
-        pr_auc = float(average_precision_score(inputs.truth[validation], scores))
-        tried[str(candidate)] = pr_auc
-        if pr_auc > best_pr_auc:
-            best_pr_auc, best_model, best_weight = pr_auc, model, weight
-    return FittedModel(best_model, best_weight, tried)
-
-
-def score_both_periods(inputs: LgbmInputs, fitted: FittedModel) -> Dict[str, Any]:
-    """Threshold from validation only; the test period is scored once with it."""
-    split, truth = inputs.split, inputs.truth
-    validation_scores = fitted.model.predict_proba(inputs.features[split.validation])
-    test_scores = fitted.model.predict_proba(inputs.features[split.test])
-    validation_scores, test_scores = validation_scores[:, 1], test_scores[:, 1]
-    threshold = best_f1_threshold(truth[split.validation], validation_scores)
-    return {
-        "scored": score_period(truth[split.test], test_scores, threshold).to_dict(),
-        "validation": score_validation(
-            truth[split.validation], validation_scores
-        ).to_dict(),
-    }
-
-
 def build_config(
-    inputs: LgbmInputs, rows: np.ndarray, fitted: FittedModel, seconds: float
+    inputs: LgbmInputs,
+    rows: np.ndarray,
+    fitted: FittedModel,
+    seconds: float,
+    settings: LightGbmSettings,
 ) -> Dict[str, Any]:
     """The settings stored in the record (same keys as GNN records where they fit)."""
     return {
         "status": "completed",
         "dataset": "LI-Small",
         "step_budget_epochs": None,
-        "epochs_requested": config.LIGHTGBM_MAX_TREES,
+        "epochs_requested": settings.max_trees,
         "validations": None,
         "steps_per_epoch": None,
         "gradient_steps": None,
@@ -171,17 +107,19 @@ def build_config(
         "laundering_labels_kept": int(inputs.truth[rows].sum()),
         "kept_labels_fingerprint": fingerprint(rows),
         "label_mask_seed": None,  # set by the caller: it is the run's seed
-        "features": "Project 2 graph features (past only, no labels)",
+        "features": feature_description(inputs),
         "feature_names": inputs.names,
         "class_weight": fitted.weight,
         "validation_pr_auc_by_weight": fitted.validation_pr_auc_by_weight,
-        "lightgbm_settings": {
-            "max_trees": config.LIGHTGBM_MAX_TREES,
-            "learning_rate": config.LIGHTGBM_LEARNING_RATE,
-            "num_leaves": config.LIGHTGBM_LEAVES,
-            "random_state": config.LIGHTGBM_SEED,
-        },
+        "lightgbm_settings": settings.to_dict(),
     }
+
+
+def feature_description(inputs: LgbmInputs) -> str:
+    """Which feature set the run used, in words."""
+    if len(inputs.names) == len(FEATURE_COLUMNS):
+        return "Project 2 graph features (past only, no labels)"
+    return "Project 2 graph features plus extra fan-in/out and 2-hop features"
 
 
 def lightgbm_version() -> str:
@@ -192,7 +130,12 @@ def lightgbm_version() -> str:
 
 
 def run_one(
-    inputs: LgbmInputs, fraction: float, seed: int, records_dir: Path, results_dir: Path
+    inputs: LgbmInputs,
+    fraction: float,
+    seed: int,
+    records_dir: Path,
+    results_dir: Path,
+    settings: LightGbmSettings = DEFAULT_SETTINGS,
 ) -> Optional[Path]:
     """Train and score one (fraction, seed). Returns the record path, None if done."""
     run_id = make_run_id(config.LIGHTGBM_MODEL, "scratch", fraction, seed)
@@ -202,14 +145,14 @@ def run_one(
     rows = kept_training_rows(inputs.split.train_end, fraction, seed)
     assert_same_labels_as_phase_c(rows, fraction, seed, results_dir)
     start = time.time()
-    fitted = fit_best_weight(inputs, rows)
+    fitted = fit_best_weight(inputs, rows, settings, seed)
     metrics = score_both_periods(inputs, fitted)
     seconds = time.time() - start
     save_model(fitted, run_id)
-    settings = build_config(inputs, rows, fitted, seconds)
-    settings["label_mask_seed"] = seed
+    run_config = build_config(inputs, rows, fitted, seconds, settings)
+    run_config["label_mask_seed"] = seed
     record = RunRecord(
-        run_id, config.LIGHTGBM_MODEL, "scratch", fraction, seed, settings,
+        run_id, config.LIGHTGBM_MODEL, "scratch", fraction, seed, run_config,
         git_commit(config.PROJECT_ROOT), "n/a (no Multi-GNN code used)", metrics,
         int(fitted.model.n_estimators_),
         int(fitted.model.best_iteration_ or 0), seconds,
@@ -231,14 +174,26 @@ def save_model(fitted: FittedModel, run_id: str) -> Path:
 
 
 def run_phase_e(
-    raw_csv: Path, cache_dir: Path, records_dir: Path, results_dir: Path, rebuild: bool
+    raw_csv: Path,
+    cache_dir: Path,
+    records_dir: Path,
+    results_dir: Path,
+    rebuild: bool,
+    simple: bool = False,
 ) -> List[Path]:
-    """Every (fraction, seed) of Phase E; finished runs are skipped."""
+    """Every (fraction, seed) of Phase E; finished runs are skipped.
+
+    `simple` is the first version: Project 2's 16 features and settings. The
+    default is the version tuned on validation (extra features, tuned settings).
+    """
     inputs = load_inputs(raw_csv, cache_dir, rebuild)
+    if not simple:
+        inputs = with_extra_features(inputs, raw_csv, cache_dir)
+    settings = DEFAULT_SETTINGS if simple else TUNED_SETTINGS
     written = []
     for seed in config.PHASE_C_SEEDS:
         for fraction in sorted(config.PHASE_C_FRACTIONS, reverse=True):
-            path = run_one(inputs, fraction, seed, records_dir, results_dir)
+            path = run_one(inputs, fraction, seed, records_dir, results_dir, settings)
             written += [path] if path else []
     return written
 
@@ -252,6 +207,9 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     phase_e = config.PHASES_RESULTS_DIR / config.PHASE_E_RUN_SET / "records"
     parser.add_argument("--records-dir", type=Path, default=phase_e)
     parser.add_argument("--rebuild", action="store_true", help="Rebuild the features")
+    parser.add_argument(
+        "--simple", action="store_true", help="Project 2's 16 features and settings"
+    )
     return parser.parse_args(argv)
 
 
@@ -260,7 +218,7 @@ def main() -> None:
     arguments = parse_arguments()
     written = run_phase_e(
         arguments.raw_csv, arguments.cache_dir, arguments.records_dir,
-        config.RESULTS_DIR, arguments.rebuild,
+        config.RESULTS_DIR, arguments.rebuild, arguments.simple,
     )  # fmt: skip
     print("Wrote %d records to %s" % (len(written), arguments.records_dir))
 

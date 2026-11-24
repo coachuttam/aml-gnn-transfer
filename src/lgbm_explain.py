@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from src import config
-from src.lgbm_inputs import LgbmInputs, load_inputs
+from src.lgbm_inputs import LgbmInputs, load_inputs, with_extra_features
 from src.lgbm_run import LGBM_MODELS_FOLDER
 from src.records import make_run_id
 
@@ -144,6 +144,8 @@ def main() -> None:
     )
     model_file = config.DATA_ROOT / LGBM_MODELS_FOLDER / (run_id + ".txt")
     booster = lightgbm.Booster(model_file=str(model_file))
+    if booster.num_feature() > len(inputs.names):  # the tuned model has extra features
+        inputs = with_extra_features(inputs, arguments.raw_csv, arguments.cache_dir)
     output_dir = config.PHASES_RESULTS_DIR / config.PHASE_E_RUN_SET
     for path in explain_run(
         inputs, booster, output_dir, arguments.fraction, arguments.seed

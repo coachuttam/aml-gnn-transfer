@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src import config, lgbm_run
+from src import config, lgbm_model, lgbm_run
 from src.label_mask import fingerprint
 from src.lgbm_data import DaySplit, day_split, load_in_multignn_order
 from src.lgbm_features import FEATURE_COLUMNS, add_account_codes
@@ -199,13 +199,13 @@ def test_training_sees_only_the_kept_labelled_training_rows(
     small_model, tmp_path: Path, monkeypatch
 ) -> None:
     seen: List[np.ndarray] = []
-    original = lgbm_run.fit_one_weight
+    original = lgbm_model.fit_one_weight
 
-    def spy(inputs, rows, weight):
+    def spy(inputs, rows, *others):
         seen.append(rows)
-        return original(inputs, rows, weight)
+        return original(inputs, rows, *others)
 
-    monkeypatch.setattr(lgbm_run, "fit_one_weight", spy)
+    monkeypatch.setattr(lgbm_model, "fit_one_weight", spy)
     run_made_up(small_model, tmp_path)
     train_end = small_model.split.train_end
     assert seen and all(len(r) == round(train_end * 0.5) for r in seen)
@@ -303,3 +303,100 @@ def test_the_label_efficiency_chart_gets_a_lightgbm_line(tmp_path: Path) -> None
 
     assert path.stat().st_size > 1000 and LIGHTGBM_NAME
     plt.close("all")
+
+
+# --- extra features (tried on validation only) ---
+
+
+def extra_frame() -> pd.DataFrame:
+    """Account 0 pays 1, 1, then 2; account 1 pays 2 once. One payment per hour."""
+    sender = [0, 0, 0, 1]
+    receiver = [1, 1, 2, 2]
+    stamps = pd.Timestamp("2022-09-01") + pd.to_timedelta([0, 1, 2, 3], unit="h")
+    return pd.DataFrame(
+        {
+            "from_code": sender, "to_code": receiver, "timestamp": stamps,
+            "amount_paid": [10.0, 30.0, 50.0, 70.0],
+        }
+    )  # fmt: skip
+
+
+def test_extra_features_flag_the_first_payment_of_each_pair() -> None:
+    from src.lgbm_features_extra import build_extra_features
+
+    table = build_extra_features(extra_frame())
+    assert table["is_first_time_pair"].tolist() == [1.0, 0.0, 1.0, 1.0]
+
+
+def test_extra_features_count_new_partners_in_a_window() -> None:
+    from src.lgbm_features_extra import build_extra_features
+
+    table = build_extra_features(extra_frame())
+    # Account 0 met receiver 1 (hour 0) and receiver 2 (hour 2), both inside 24 h.
+    assert table["sender_new_partners_24h"].tolist() == [1.0, 1.0, 2.0, 1.0]
+    # Receiver 2 was first paid by account 0 (hour 2) and then by account 1 (hour 3).
+    assert table["receiver_new_senders_24h"].tolist() == [1.0, 1.0, 1.0, 2.0]
+
+
+def test_the_second_hop_counts_whom_the_receiver_already_pays() -> None:
+    from src.lgbm_features_extra import build_extra_features
+
+    hours = pd.Timestamp("2022-09-01") + pd.to_timedelta([0, 1], unit="h")
+    frame = pd.DataFrame(
+        {
+            "from_code": [1, 0], "to_code": [2, 1], "timestamp": hours,
+            "amount_paid": [5.0, 5.0],
+        }
+    )  # fmt: skip
+    table = build_extra_features(frame)
+    # At hour 1 account 0 pays account 1, who already paid account 2 (one onward hop).
+    assert table["receiver_out_degree"].tolist() == [0.0, 1.0]
+    assert table["sender_in_degree"].tolist() == [0.0, 0.0]
+
+
+def test_amount_history_compares_a_payment_with_the_senders_usual_amount() -> None:
+    from src.lgbm_features_extra import build_extra_features
+
+    table = build_extra_features(extra_frame())
+    # Sender 0's running mean after payments 10, 30, 50 is 10, 20, 30.
+    assert table["sender_mean_amount_sent"].tolist()[:3] == [10.0, 20.0, 30.0]
+    assert table["sender_transaction_count"].tolist()[:3] == [1.0, 2.0, 3.0]
+
+
+def test_extra_features_need_no_label_column() -> None:
+    from src.lgbm_features_extra import EXTRA_COLUMNS, build_extra_features
+
+    table = build_extra_features(extra_frame())  # the frame has no label at all
+    assert list(table.columns) == EXTRA_COLUMNS
+    assert not [name for name in EXTRA_COLUMNS if "laundering" in name]
+
+
+# --- tuning never reads the test period ---
+
+
+def test_a_tuning_score_does_not_touch_the_test_rows(small_model) -> None:
+    fitted = lgbm_run.fit_best_weight(small_model, np.arange(0, 1800, 2))
+    poisoned = small_model.features.copy()
+    poisoned[small_model.split.test] = np.nan
+    other = LgbmInputs(
+        poisoned, small_model.truth, small_model.split, small_model.names
+    )
+    clean = lgbm_run.score_both_periods(small_model, fitted, include_test=False)
+    same = lgbm_run.score_both_periods(other, fitted, include_test=False)
+    assert "scored" not in clean and clean == same
+
+
+def test_the_default_settings_are_project_twos_and_the_tuned_ones_differ() -> None:
+    from src.lgbm_model import DEFAULT_SETTINGS, TUNED_SETTINGS
+
+    assert DEFAULT_SETTINGS.leaves == 7 and DEFAULT_SETTINGS.patience == 30
+    assert TUNED_SETTINGS.patience > DEFAULT_SETTINGS.patience
+    assert 0.5 in TUNED_SETTINGS.weights and TUNED_SETTINGS.leaves == 7
+
+
+def test_the_record_stores_the_settings_it_was_trained_with(
+    small_model, tmp_path: Path
+) -> None:
+    record = run_made_up(small_model, tmp_path)
+    assert record["config"]["lightgbm_settings"]["leaves"] == 7
+    assert record["config"]["feature_names"] == list(FEATURE_COLUMNS)

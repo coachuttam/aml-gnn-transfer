@@ -22,10 +22,12 @@ import numpy as np
 
 from src.lgbm_data import DaySplit, day_split, load_in_multignn_order
 from src.lgbm_features import FEATURE_COLUMNS, add_account_codes, build_features
+from src.lgbm_features_extra import EXTRA_COLUMNS, build_extra_features
 
 FEATURES_FILE = "features.npy"
 TRUTH_FILE = "truth.npy"
 SPLIT_FILE = "split.json"
+EXTRA_FILE = "features_extra.npy"
 
 
 @dataclass(frozen=True)
@@ -85,3 +87,29 @@ def load_inputs(raw_csv: Path, cache_dir: Path, rebuild: bool = False) -> LgbmIn
     inputs = build_inputs(raw_csv)
     save_inputs(inputs, cache_dir)
     return inputs
+
+
+def build_extra_matrix(raw_csv: Path) -> np.ndarray:
+    """The extra features for every row, in the same row order as the base ones."""
+    start = time.time()
+    frame = load_in_multignn_order(raw_csv)
+    frame = add_account_codes(frame.drop(columns=["is_laundering"]))
+    extra = build_extra_features(frame).to_numpy().astype(np.float32)
+    print("Built %d extra features in %.0f s" % (extra.shape[1], time.time() - start))
+    return extra
+
+
+def with_extra_features(
+    inputs: LgbmInputs, raw_csv: Path, cache_dir: Path
+) -> LgbmInputs:
+    """`inputs` with the extra feature columns added (built once, then cached)."""
+    path = cache_dir / EXTRA_FILE
+    if not path.exists():
+        np.save(path, build_extra_matrix(raw_csv))
+    extra = np.load(path)
+    if len(extra) != len(inputs.features):
+        raise ValueError("Cached extra features do not match the base features")
+    features = np.concatenate([inputs.features, extra], axis=1)
+    return LgbmInputs(
+        features, inputs.truth, inputs.split, inputs.names + EXTRA_COLUMNS
+    )

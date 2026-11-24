@@ -18,7 +18,7 @@ This project has no app in v1. Its outputs are tables, one main chart and a READ
 | `zero_shot` | Trained on HI-Small only |
 | `gin` + flags | Multi-GIN + EU |
 | `pna` + flags | Multi-PNA + EU |
-| `lightgbm` | LightGBM (Project 2 features) |
+| `lightgbm` | LightGBM (simple baseline) |
 
 ## Colours
 

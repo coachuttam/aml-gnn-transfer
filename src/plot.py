@@ -33,7 +33,7 @@ from src.config import RESULTS_DIR  # noqa: E402
 from src.plot_curves import draw_curves  # noqa: E402
 
 LIGHTGBM_COLOUR = "#c2410c"  # DESIGN_SYSTEM.md: LightGBM / rules baseline
-LIGHTGBM_NAME = "LightGBM (Project 2 features)"
+LIGHTGBM_NAME = "LightGBM (simple baseline)"
 LIGHTGBM_MODEL = "lightgbm"
 LIGHTGBM_RUN_SET = "phaseE"
 RUN_SETS_WITH_BASELINE = ("phaseC", "phaseD")  # charts that also show LightGBM
