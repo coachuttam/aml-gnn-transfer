@@ -188,7 +188,7 @@ Test period of LI-Small, mean ± standard deviation over 2 seeds (at 100% both s
 What was checked before reporting it:
 - **First version (Project 2's 16 features and settings):** test F1 was flat at about 0.12 and lowest at 100%. Early stopping mostly was not halting too early: with up to 2000 trees and patience 100 it stopped at the same tree at 10% and 25%, and validation PR-AUC peaks after 37 to 152 trees and then falls. At 100% more patience did help (37 to 268 trees, validation PR-AUC 0.037 to 0.051). The features were weak on LI-Small: the best single feature (7-day payments received) has a validation PR-AUC of 0.008 against a base rate of 0.0006, and most features are near 1x.
 - **Fix, chosen on validation only** (`python -m src.lgbm_tune`, table in `results/phases/phaseE/tuning_val.csv`, three cells: 10%, 25%, 100% at seed 0): mean validation PR-AUC went from 0.047 (first version) to 0.104. Most of the gain came from 13 extra past-only features (new counterparties in 24 h and 7 d, how many accounts the receiver pays on, account history and amount against the account's usual amount); more trees and patience alone gave 0.052, lower class weights 0.063, extra features alone 0.086, both together 0.104. Regularising (15 leaves, larger leaves, subsampling) did worse (0.069).
-- **Test was scored once per run, for the final settings only.** The first version's records are kept in `results/phases/phaseE/records/superseded/` and are not in the tables. We had seen the first version's test numbers before choosing to tune it, and nothing in the choice used test rows.
+- **Test was scored once per run, for the final settings only.** The first version's records are kept in `results/phases/phaseE/records/superseded/` and are not in the tables. The first version's test scores were seen before tuning; the tuning choice used validation only (see [`tuning_val.csv`](results/phases/phaseE/tuning_val.csv)).
 
 | Validation, mean of the 3 cells | First version | Final |
 | --- | --- | --- |
@@ -197,7 +197,7 @@ What was checked before reporting it:
 
 Test F1 (mean over seeds) went from 12.2 / 12.4 / 11.6% to 12.9 / 15.4 / 20.9% at 10 / 25 / 100%, and now rises with the share of labels. At 10% the gain is within the seed spread.
 
-**Limits.** Features are still simple: 29 columns from timestamps, accounts, amounts and formats, with no graph embeddings. The settings were chosen from 7 candidates on 3 cells. LightGBM alone says nothing about whether a better tabular model could match the GNN.
+**Limits.** Features are still simple: 29 columns from timestamps, accounts, amounts and formats, with no graph embeddings. The settings were chosen from 7 candidates on 3 cells. LightGBM alone says nothing about whether a better tabular model could match the GNN. Stronger graph feature engineering (for example IBM's graph feature preprocessing in Altman et al. 2023) could narrow the gap to the GNNs; ours is a simple baseline.
 
 **SHAP.** `python -m src.lgbm_explain` writes the top-5 SHAP reasons for the 100 highest-scored test alerts of the 10% seed 0 run (`reason_codes_f0.1_s0.csv`) and a summary plot (`shap_summary_f0.1_s0.png`). The most common reasons are payment format, payments sent in 7 days and first-time pairs.
 
