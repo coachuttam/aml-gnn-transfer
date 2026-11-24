@@ -161,6 +161,28 @@ COLAB_UNITS_AVAILABLE = 59.76  # the owner's balance when the budget was set
 # finetune are still improving after 8 epochs. Every epoch is validated.
 PHASE_A_BUDGET = 20
 
+# Multi-GNN splits LI-Small by whole days into train, validation and test of about
+# 60%, 20% and 20% (external/Multi-GNN/data_loading.py); the LightGBM baseline
+# ports that split. IBM's formatter counts time from 10 s before midnight of day 1.
+SPLIT_SHARES: Tuple[float, ...] = (0.6, 0.2, 0.2)
+FIRST_TIMESTAMP_OFFSET_SECONDS = 10
+
+# Phase E: LightGBM on Project 2's features, trained on the same kept labels as
+# Phase C. Model settings are Project 2's (aml-ibm-experiment/src/ibm/train.py),
+# so the baseline is the one that project reported, not a freshly tuned one.
+LIGHTGBM_MODEL = "lightgbm"
+PHASE_E_RUN_SET = "phaseE"
+LIGHTGBM_MAX_TREES = 400
+LIGHTGBM_EARLY_STOPPING_ROUNDS = 30  # stop when validation PR-AUC stalls this long
+LIGHTGBM_LEARNING_RATE = 0.05
+LIGHTGBM_LEAVES = 7  # Project 2 chose 7 over 15 and 63 on validation PR-AUC
+LIGHTGBM_SEED = 42  # Project 2's value; the label-mask seed is separate
+# Class weights for the laundering class, picked on validation PR-AUC only.
+# "balanced" means negatives / positives among the kept training rows.
+LIGHTGBM_CANDIDATE_WEIGHTS: Tuple[object, ...] = (1.0, 10.0, "balanced")
+SHAP_TOP_ALERTS = 100  # one analyst day, same as PRECISION_AT_K
+SHAP_REASONS_PER_ALERT = 5
+
 # Phase C's budget, in epochs at fraction 1.0. 20 = Phase A's budget, so Phase C
 # reuses the two Phase A runs (the owner's choice after reading Phase A's curves).
 # Phases C and D refuse to start if it is None.

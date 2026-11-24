@@ -173,6 +173,18 @@ Units are run time x the L4 rate (1.94 units per hour) from each record. One see
 
 Neither arm improves after epoch 16, and both best epochs fall inside 16. Validation F1 swings by 10 points or more from one epoch to the next (fine-tune drops to 8.2% at epoch 9 and 9.9% at epoch 17), so the plateau epoch is a rough guide from one seed. Phase C at budget 16 is the cheaper choice and covers both best epochs; budget 20 costs about 2 more units but lets Phase C reuse the two Phase A runs.
 
+### Phase E (LightGBM baseline, built and tested, not yet run)
+
+LightGBM on Project 2's graph features, trained on the same kept labels as Phase C: fractions 10/25/100%, seeds 0 and 1, six runs, model `lightgbm`, run set `phaseE`. It runs on the laptop CPU and needs the raw `LI-Small_Trans.csv` (not in git).
+
+- **Same split and masks.** `src/lgbm_data.py` ports Multi-GNN's day split and IBM's row order; `src/label_mask.py` picks the kept labels. Each run's kept-label fingerprint is compared with the Phase C records and the run stops on a mismatch.
+- **Labels only from kept training rows.** The features come from timestamps, accounts, amounts and formats (past only), so no label reaches them. Class weight and early stopping use validation PR-AUC; the alert threshold comes from validation; test is scored once.
+- **Settings are Project 2's** (400 trees at most, 7 leaves, learning rate 0.05), not freshly tuned.
+- **Reason codes.** `python -m src.lgbm_explain` writes SHAP (TreeExplainer) top-5 reasons for the 100 highest-scored test alerts of the 10% seed 0 run, and a summary plot, to `results/phases/phaseE/`.
+- **Chart.** Once Phase E records exist, `python -m src.plot --run-set phaseC` adds a LightGBM line to the label-efficiency charts.
+
+To run: put `LI-Small_Trans.csv` in `data/Small_LI/` (copy it from Drive `aml-gnn-transfer/data/Small_LI/`, or `python -m src.download_data` with a Kaggle token), then `python -m src.lgbm_run`. On a Mac without Homebrew, LightGBM needs an OpenMP library; see the note under Quick start.
+
 ### Phases A to D
 
 All run from `notebooks/colab_runner.ipynb` by setting `RUN_SET` in its first cell. Sets are described in `configs/phases.yaml`; the numbers behind them are named constants in `src/config.py`.
@@ -206,6 +218,13 @@ python -m pytest -q
 On Kaggle: open `notebooks/kaggle_runner.ipynb`, attach the [IBM AML dataset](https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml), switch the GPU on, and run the cells.
 
 On Colab: open `notebooks/colab_runner.ipynb`, put your Kaggle token at `aml-gnn-transfer/kaggle.json` in Drive, switch the GPU on, set `RUN_SET` in the first cell and run the cells. It starts as a smoke test (`RUN_SET = "smoke"`); the notebooks are written by `python -m tools.make_notebooks`. The Kaggle token stays on Drive and is never committed.
+
+LightGBM on a Mac without Homebrew (Phase E): `import lightgbm` fails with "Library not loaded: libomp.dylib". Either `brew install libomp`, or point the library at another copy, for example Anaconda's:
+
+```bash
+L=.venv/lib/python3.9/site-packages/lightgbm/lib/lib_lightgbm.dylib
+install_name_tool -add_rpath "$HOME/anaconda3/lib" "$L" && codesign --force -s - "$L"
+```
 
 ## Related projects
 

@@ -6,3 +6,4 @@ lightgbm
 matplotlib
 pytest
 pyyaml
+shap

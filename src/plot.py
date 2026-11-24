@@ -32,6 +32,11 @@ from src.collect import (  # noqa: E402
 from src.config import RESULTS_DIR  # noqa: E402
 from src.plot_curves import draw_curves  # noqa: E402
 
+LIGHTGBM_COLOUR = "#c2410c"  # DESIGN_SYSTEM.md: LightGBM / rules baseline
+LIGHTGBM_NAME = "LightGBM (Project 2 features)"
+LIGHTGBM_MODEL = "lightgbm"
+LIGHTGBM_RUN_SET = "phaseE"
+RUN_SETS_WITH_BASELINE = ("phaseC", "phaseD")  # charts that also show LightGBM
 FINETUNE_COLOUR = "#1f5fa8"
 SCRATCH_COLOUR = "#6b7280"
 TEXT_COLOUR = "#1f2937"
@@ -51,6 +56,7 @@ METRICS = {  # attribute on SummaryRow -> (axis label, file name part)
     "test_pr_auc": ("PR-AUC", "pr_auc"),
 }
 StatsByArm = Dict[str, List[Stat]]
+BASELINE_NOTE = " LightGBM uses the same kept labels (run set phaseE)."
 
 
 def scale(metric: str) -> float:
@@ -113,16 +119,22 @@ def chart_title(by_model: Dict[str, StatsByArm], metric_name: str) -> str:
 
 
 def draw_line(
-    axis, stats: List[Stat], positions: Dict[float, int], arm: str, metric: str
+    axis,
+    stats: List[Stat],
+    positions: Dict[float, int],
+    arm: str,
+    metric: str,
+    colour: Optional[str] = None,
+    name: Optional[str] = None,
 ):
     """One setup's line: markers, whiskers when there are several seeds, labels."""
-    colour = FINETUNE_COLOUR if arm == "finetune" else SCRATCH_COLOUR
+    colour = colour or (FINETUNE_COLOUR if arm == "finetune" else SCRATCH_COLOUR)
     xs = [positions[point.fraction] for point in stats]
     ys = [point.mean * scale(metric) for point in stats]
     spreads = [point.std * scale(metric) for point in stats]
     axis.errorbar(xs, ys, yerr=spreads if any(spreads) else None, marker="o",
                   linewidth=2.5, markersize=8, capsize=5, color=colour,
-                  label=SYSTEM_NAMES[arm])  # fmt: skip
+                  label=name or SYSTEM_NAMES[arm])  # fmt: skip
     for x, y in zip(xs, ys):
         text = "%.1f" % y if metric == "test_minority_f1" else "%.3f" % y
         axis.annotate(text, (x, y), textcoords="offset points", xytext=(0, 12),
@@ -158,11 +170,16 @@ def style_panel(axis, model: str, fractions: List[float]) -> None:
 def draw_panel(axis, rows: List[SummaryRow], model: str, metric: str) -> StatsByArm:
     """One model's panel. Returns its numbers for the title."""
     stats = {arm: stats_by_fraction(rows, model, arm, metric) for arm in ARMS}
+    baseline = stats_by_fraction(rows, LIGHTGBM_MODEL, "scratch", metric)
     fractions = sorted({point.fraction for arm in ARMS for point in stats[arm]})
     positions = {fraction: index for index, fraction in enumerate(fractions)}
     for arm in ARMS:
         if stats[arm]:
             draw_line(axis, stats[arm], positions, arm, metric)
+    if baseline:
+        draw_line(
+            axis, baseline, positions, "scratch", metric, LIGHTGBM_COLOUR, LIGHTGBM_NAME
+        )
     if metric == "test_minority_f1" and model in REFERENCE_F1:
         draw_reference(axis, model, len(fractions) - 1)
     style_panel(axis, model, fractions)
@@ -176,6 +193,7 @@ def footnote(rows: List[SummaryRow], run_set: str) -> str:
         key = (row.model, row.arm, row.fraction)
         counts[key] = counts.get(key, 0) + 1
     most, fewest = max(counts.values()), min(counts.values())
+    has_baseline = any(row.model == LIGHTGBM_MODEL for row in rows)
     seeds = "%d seed%s" % (most, "" if most == 1 else "s")
     if fewest != most:
         seeds = "%d to %d seeds" % (fewest, most)
@@ -183,8 +201,9 @@ def footnote(rows: List[SummaryRow], run_set: str) -> str:
         "Whiskers: ±1 standard deviation." if most > 1 else "No whiskers: one seed."
     )
     return (
-        "Run set: %s. %s per point. %s Equal training steps at every share.\n"
-        "IBM AML (synthetic), LI-Small test period." % (run_set, seeds, whiskers)
+        "Run set: %s. %s per point. %s Equal training steps at every share.%s\n"
+        "IBM AML (synthetic), LI-Small test period."
+        % (run_set, seeds, whiskers, BASELINE_NOTE if has_baseline else "")
     )
 
 
@@ -222,8 +241,10 @@ def main(argv: Optional[List[str]] = None) -> None:
     arguments = parser.parse_args(argv)
     folders = dict(record_folders())
     rows = summary_rows(list(folders.items()))
-    rows = [r for r in rows if r.run_set == arguments.run_set and r.arm in ARMS]
-    if not rows:
+    own = [r for r in rows if r.run_set == arguments.run_set and r.arm in ARMS]
+    baseline = [r for r in rows if r.run_set == LIGHTGBM_RUN_SET]
+    rows = own + (baseline if arguments.run_set in RUN_SETS_WITH_BASELINE else [])
+    if not any(r.model in MODEL_NAMES for r in own):
         raise SystemExit("No scratch/finetune records for %s" % arguments.run_set)
     folder = output_folder(arguments.run_set)
     for metric, (_, part) in METRICS.items():
