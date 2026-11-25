@@ -1,0 +1,139 @@
+{
+  "run_id": "pna_finetune_f0.25_s0",
+  "model": "pna",
+  "mode": "finetune",
+  "fraction": 0.25,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": 16,
+    "epochs_requested": 64,
+    "validations": 16,
+    "steps_per_epoch": 136,
+    "gradient_steps": 8704,
+    "environment": "env.yml / NVIDIA L4",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 22573.25102829933,
+    "scoring_seconds": 255.5501787662506,
+    "multignn_settings": {
+      "lr": 0.0006116418195373612,
+      "w_ce1": 1.0003967674742307,
+      "w_ce2": 7.077633468006714,
+      "dropout": 0.08340440094051481,
+      "final_dropout": 0.28812979737686323,
+      "n_hidden": 20
+    },
+    "stock_training_loop": false,
+    "checkpoint_run_id": "pna_finetune_f0.25_s0",
+    "fine_tuned_from": "pna_source_f1.0_s0",
+    "train_transactions": 4432934,
+    "labels_kept": 1108234,
+    "laundering_labels_kept": 492,
+    "kept_labels_fingerprint": "a9524a4e6ddbc9ea",
+    "label_mask_seed": 0,
+    "checkpoint_is_last_epoch": false,
+    "validation_curve": [
+      [
+        4,
+        0.2723
+      ],
+      [
+        8,
+        0.2603
+      ],
+      [
+        12,
+        0.2424
+      ],
+      [
+        16,
+        0.2607
+      ],
+      [
+        20,
+        0.2181
+      ],
+      [
+        24,
+        0.2182
+      ],
+      [
+        28,
+        0.2345
+      ],
+      [
+        32,
+        0.2224
+      ],
+      [
+        36,
+        0.2126
+      ],
+      [
+        40,
+        0.1963
+      ],
+      [
+        44,
+        0.1986
+      ],
+      [
+        48,
+        0.1985
+      ],
+      [
+        52,
+        0.1828
+      ],
+      [
+        56,
+        0.1858
+      ],
+      [
+        60,
+        0.1769
+      ],
+      [
+        64,
+        0.1371
+      ]
+    ]
+  },
+  "ours_commit": "003676f890772cefb92d796af199182a4f638c3e",
+  "multignn_commit": "252b0252afca109d1d216c411c59ff70753b25fc",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.35803497085761865,
+      "precision": 0.5388471177944862,
+      "recall": 0.26807980049875313,
+      "pr_auc": 0.2844203301264111,
+      "precision_at_100": 0.88,
+      "alerts": 399,
+      "threshold": 0.5835068821907043,
+      "recall_at_alert_budget": {
+        "10000": 0.6209476309226932,
+        "25000": 0.7468827930174564,
+        "50000": 0.7855361596009975
+      }
+    },
+    "validation": {
+      "minority_f1": 0.285981308411215,
+      "precision": 0.51,
+      "recall": 0.1987012987012987,
+      "pr_auc": 0.21720879554240724,
+      "precision_at_100": 0.86,
+      "alerts": 300,
+      "threshold": 0.5835068821907043,
+      "recall_at_alert_budget": {
+        "10000": 0.5415584415584416,
+        "25000": 0.7116883116883117,
+        "50000": 0.7740259740259741
+      }
+    }
+  },
+  "epochs_trained": 64,
+  "best_epoch": 4,
+  "runtime_seconds": 22828.801207065582
+}

@@ -1,0 +1,139 @@
+{
+  "run_id": "pna_scratch_f0.25_s0",
+  "model": "pna",
+  "mode": "scratch",
+  "fraction": 0.25,
+  "seed": 0,
+  "config": {
+    "status": "completed",
+    "dataset": "LI-Small",
+    "step_budget_epochs": 16,
+    "epochs_requested": 64,
+    "validations": 16,
+    "steps_per_epoch": 136,
+    "gradient_steps": 8704,
+    "environment": "env.yml / NVIDIA L4",
+    "smoke_test": false,
+    "scoring_resumed": false,
+    "training_seconds": 22618.93522286415,
+    "scoring_seconds": 252.19041275978088,
+    "multignn_settings": {
+      "lr": 0.0006116418195373612,
+      "w_ce1": 1.0003967674742307,
+      "w_ce2": 7.077633468006714,
+      "dropout": 0.08340440094051481,
+      "final_dropout": 0.28812979737686323,
+      "n_hidden": 20
+    },
+    "stock_training_loop": false,
+    "checkpoint_run_id": "pna_scratch_f0.25_s0",
+    "fine_tuned_from": null,
+    "train_transactions": 4432934,
+    "labels_kept": 1108234,
+    "laundering_labels_kept": 492,
+    "kept_labels_fingerprint": "a9524a4e6ddbc9ea",
+    "label_mask_seed": 0,
+    "checkpoint_is_last_epoch": false,
+    "validation_curve": [
+      [
+        4,
+        0.0
+      ],
+      [
+        8,
+        0.0
+      ],
+      [
+        12,
+        0.0
+      ],
+      [
+        16,
+        0.0
+      ],
+      [
+        20,
+        0.0469
+      ],
+      [
+        24,
+        0.1571
+      ],
+      [
+        28,
+        0.171
+      ],
+      [
+        32,
+        0.1261
+      ],
+      [
+        36,
+        0.1873
+      ],
+      [
+        40,
+        0.1663
+      ],
+      [
+        44,
+        0.1946
+      ],
+      [
+        48,
+        0.1871
+      ],
+      [
+        52,
+        0.1876
+      ],
+      [
+        56,
+        0.1709
+      ],
+      [
+        60,
+        0.1667
+      ],
+      [
+        64,
+        0.1411
+      ]
+    ]
+  },
+  "ours_commit": "934410e871b849b7ba084266b62bf01520458e0d",
+  "multignn_commit": "252b0252afca109d1d216c411c59ff70753b25fc",
+  "metrics": {
+    "scored": {
+      "minority_f1": 0.1997703788748565,
+      "precision": 0.1851063829787234,
+      "recall": 0.2169576059850374,
+      "pr_auc": 0.15063990721615245,
+      "precision_at_100": 0.68,
+      "alerts": 940,
+      "threshold": 0.5560309886932373,
+      "recall_at_alert_budget": {
+        "10000": 0.486284289276808,
+        "25000": 0.6359102244389028,
+        "50000": 0.7182044887780549
+      }
+    },
+    "validation": {
+      "minority_f1": 0.21352313167259787,
+      "precision": 0.23622047244094488,
+      "recall": 0.19480519480519481,
+      "pr_auc": 0.1367389903655064,
+      "precision_at_100": 0.64,
+      "alerts": 635,
+      "threshold": 0.5560309886932373,
+      "recall_at_alert_budget": {
+        "10000": 0.4935064935064935,
+        "25000": 0.6077922077922078,
+        "50000": 0.7012987012987013
+      }
+    }
+  },
+  "epochs_trained": 64,
+  "best_epoch": 44,
+  "runtime_seconds": 22871.125635623932
+}

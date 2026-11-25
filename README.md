@@ -2,7 +2,7 @@
 
 Does pre-training a graph neural network on synthetic AML data reduce how many labelled laundering cases a bank needs?
 
-**Status: pilot, Phases B, A, C and E done (GIN only, two seeds in Phase C; LightGBM simple baseline in Phase E); Phase D (PNA, seed 0, budget 16) is set up, not yet run.** Phase C is the first answer to RQ2, with only two seeds.
+**Status: all planned phases done: pilot, B, A, C (GIN, two seeds), D (PNA, one seed) and E (LightGBM simple baseline).** The answer to RQ2 is in [Final results](#final-results), with one to two seeds per point.
 
 Docs: [PRD](PRD.md) · [Architecture](ARCHITECTURE.md) · [Design system](DESIGN_SYSTEM.md) · [Agent instructions](AGENTS.md)
 
@@ -87,7 +87,64 @@ These come from the first four pilot runs (seed 0, 3-epoch budget, since superse
 
 If a pilot run's step budget changes, records and models made at the old budget are moved to `superseded/` folders, not overwritten or deleted, and those runs are done again.
 
-## Results
+## Final results
+
+![Minority F1 against share of labels, all models](results/final/label_scarcity_f1.png)
+
+![PR-AUC against share of labels, all models](results/final/label_scarcity_pr_auc.png)
+
+Test period of LI-Small. GIN: Phase C, 2 seeds, mean ± std (budget 20). PNA: Phase D, **1 seed**, no spread (budget 16). LightGBM: Phase E, 2 seeds, a simple baseline. The x-axis has three label shares and is not to scale. The dotted F1 lines are Egressy et al. (2024), 26.88 for Multi-GIN + EU and 33.07 for Multi-PNA + EU (their numbers, not ours).
+
+**Same labels everywhere.** GIN, PNA and LightGBM share the same kept-label fingerprints at each label share and seed (seed 0: `bdbd2704e584f930` at 10% and `a9524a4e6ddbc9ea` at 25%; seed 1 has its own; at 100% both seeds use `0dc05dd6e4020377`, the full label set). Scratch and fine-tune runs of one model also share them, so every comparison is on the same labels.
+
+### PNA, from scratch against fine-tuned (Phase D, seed 0, budget 16)
+
+| System | Labels | Minority F1 | PR-AUC | Precision@100 | Recall@10k | Best epoch (of trained) | GPU hours | Colab units |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Trained on HI-Small (scored on HI-Small test) | HI-Small | 66.6% | 0.659 | 0.96 | 84.5% | 8 of 10 | 2.8 | 5.5 |
+| Trained from scratch | 10% | 21.3% | 0.126 | 0.58 | 48.0% | 40 of 160 | 6.4 | 12.4 |
+| Pre-trained on HI-Small, then fine-tuned | 10% | 32.7% | 0.266 | 0.87 | 59.2% | 10 of 160 | 6.4 | 12.4 |
+| Trained from scratch | 25% | 20.0% | 0.151 | 0.68 | 48.6% | 44 of 64 | 6.4 | 12.3 |
+| Pre-trained on HI-Small, then fine-tuned | 25% | 35.8% | 0.284 | 0.88 | 62.1% | 4 of 64 | 6.3 | 12.3 |
+| Trained from scratch | 100% | 34.3% | 0.300 | 0.95 | 57.0% | 16 of 16 | 6.5 | 12.7 |
+| Pre-trained on HI-Small, then fine-tuned | 100% | 36.7% | 0.321 | 0.92 | 55.1% | 12 of 16 | 6.4 | 12.3 |
+| **Total** |  |  |  |  |  |  | 41.2 | 80.0 |
+
+The first row is the source model: Multi-PNA + EU trained on HI-Small and scored on the HI-Small test period (not LI-Small, so not comparable with the rest). Hours and units come from the run records (NVIDIA L4, 1.94 units per hour); the table is built by `python -m src.final_table` (`results/final_table.md`). Equal gradient steps in each scratch/fine-tune pair.
+
+### Key findings
+
+- **Headline (PNA, 1 seed): fine-tuned at 10% of the labels scored 32.7 F1, scratch at 100% scored 34.3.** That is 1.6 points apart, on a single seed, so we call them close, not equal.
+- **Fine-tuning is higher than scratch at every share, for both models and both metrics.** F1 gaps: GIN 12.7 / 9.2 / 9.5 points and PNA 11.4 / 15.8 / 2.4 at 10 / 25 / 100%. PR-AUC (PNA): 0.266 against 0.126, 0.284 against 0.151, 0.321 against 0.300. The GIN gaps at 10% and 25% are larger than the two-seed spread (see Phase C); the GIN gap at 100% rests on one unstable scratch run. PNA has no spread, so no PNA gap is shown to be beyond noise.
+- **The PNA gap is smallest at 100% (2.4 points) and largest at 25% (15.8), not at 10% (11.4).** With one seed we cannot say whether pre-training helps most at the very fewest labels for PNA; for GIN the 10% gap is the largest (12.7 against 9.2 and 9.5), with two seeds.
+- **Every GNN line is above the LightGBM mean at every share** (LightGBM 12.9 / 15.4 / 20.9), fine-tuned and scratch. The scratch GIN lead is 4.2 / 5.0 / 4.2 points, against a GIN scratch spread of 1.9 / 2.4 / 9.1; the fine-tuned leads are 14 points or more at 10% and 25%.
+- **PNA looks higher than GIN when both are fine-tuned** (32.7 against 29.8, 35.8 against 29.6, 36.7 against 34.6), but PNA is one seed at budget 16 and GIN is two seeds at budget 20. We do not claim PNA is better.
+- Against the Egressy et al. lines (their numbers, a different training setup, not a like-for-like comparison): fine-tuned GIN is above 26.88 at every share, fine-tuned PNA is above 33.07 at 25% and 100% and just below it at 10% (32.7), and scratch PNA at 100% (34.3) is also above it. We have not reproduced their numbers.
+
+### Limits
+
+- **Synthetic data, one dataset pair.** IBM AML is generated. Nothing here says how a real bank's labels would behave.
+- **One to two seeds.** GIN has 2 seeds per point, LightGBM 2, PNA **1**. With one seed there is no spread, so a PNA difference of a few points cannot be told from seed noise. At 100% the two seeds of a model see the same labels, so their spread is small and says little.
+- **Unequal budgets.** PNA ran at budget 16 and GIN at 20. The GIN against PNA comparison mixes model and budget.
+- **PNA cost about 1.8x the estimate.** Estimated at 3.5 h per comparison run (22.7 h and 44 units in total, assuming PNA is 1.5x GIN); measured 6.3 to 6.5 h each, 41.2 h and 80.0 units in total.
+- **Overfitting at small label shares.** Fine-tuned PNA's best epoch is the first validation (10 of 160 at 10%, 4 of 64 at 25%) and its validation F1 then falls (0.26 to 0.10 at 10%), so the 10% and 25% fine-tunes score a checkpoint from very early training. Fine-tuned GIN at 10% (seed 0) also peaks at epoch 10 of 200.
+- **Scratch PNA at 100% was still rising** at its last epoch (best epoch 16 of 16), so its 34.3 may understate what a longer budget gives and the 2.4-point gap at 100% may be smaller or larger with more steps.
+- **Collapsed runs.** Validation F1 drops to 0 in several runs: scratch PNA and scratch GIN at the start of training (first two to six validations), scratch GIN at 100% seed 1 from epoch 9 on, and fine-tuned GIN at 25% seed 1 from epoch 28. We score the best saved checkpoint, so the tables are not hit, but all 35 recorded runs have status `completed`; none ended as `no_improvement`.
+- **LightGBM is a simple baseline**, 29 features chosen on validation from 7 candidates, no graph embeddings (see Phase E). It says little about what a strong tabular model reaches.
+- **One source model per GNN.** Every fine-tune of a model starts from the same HI-Small checkpoint, so pre-training variance is not in any spread.
+
+### Reproduce
+
+```bash
+python -m pytest -q                 # tests
+python -m src.collect               # results/summary.csv from results/**/records
+python -m src.final_table           # results/final_table.md (PNA table, hours, units)
+python -m src.plot_final            # results/final/label_scarcity_{f1,pr_auc}.png
+```
+
+GNN runs need a GPU: `notebooks/colab_runner.ipynb` with `RUN_SET = "phaseC"` (GIN) or `"phaseD"` (PNA; about 41 GPU hours and 80 Colab units on an L4), then copy the records into `results/phases/<set>/records/`. LightGBM runs on the laptop: `python -m src.lgbm_run`. Setup is under Quick start.
+
+## Per-phase results
 
 ### Phase C (GIN, 10/25/100% of labels, seeds 0 and 1, budget 20)
 
@@ -217,7 +274,7 @@ All run from `notebooks/colab_runner.ipynb` by setting `RUN_SET` in its first ce
 
 `BUDGET_C` is 20 (set after reading Phase A); Phases C and D refuse to start without it. Every run prints an estimate, then its real minutes and Colab units with a running total, and a run expected to pass 3 GPU hours stops unless the owner has approved it (`ALLOW_LONG_RUNS`). A finished run (record with status `completed` or `no_improvement`) is skipped on a re-run, and each finished scratch/fine-tune pair is checked for identical kept labels and equal gradient steps.
 
-Phase D estimate (L4, 1.94 units/h; PNA time is assumed 1.5x GIN, not measured): PNA source about 1.6 h (3.2 units); each of the six comparison runs about 3.5 h (6.8 units), so each needs `ALLOW_LONG_RUNS`; total about 22.7 h and 44 units. If PNA is 2x GIN the total is about 59 units. The first PNA run's real time replaces the assumption.
+Phase D estimate (L4, 1.94 units/h; PNA time was assumed 1.5x GIN; measured 41.2 h and 80.0 units in total, about 1.8x, see Final results): PNA source about 1.6 h (3.2 units); each of the six comparison runs about 3.5 h (6.8 units), so each needs `ALLOW_LONG_RUNS`; total about 22.7 h and 44 units. If PNA is 2x GIN the total is about 59 units. The first PNA run's real time replaces the assumption.
 
 Tables and charts for any set: `python -m src.collect` then `python -m src.plot --run-set phaseC` (mean ± standard deviation over seeds, one panel per model, plus validation curves for runs that have them).
 
