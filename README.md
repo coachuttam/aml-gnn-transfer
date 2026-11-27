@@ -313,3 +313,7 @@ install_name_tool -add_rpath "$HOME/anaconda3/lib" "$L" && codesign --force -s -
 - [IBM/Multi-GNN](https://github.com/IBM/Multi-GNN), Apache 2.0.
 
 All data is synthetic (IBM). This is a research prototype, not a production system.
+
+## Licence
+
+Copyright (c) 2026 Uttam Kumar. All rights reserved. Shared for viewing and evaluation only; see [LICENSE](LICENSE). Contact the author for any reuse.
