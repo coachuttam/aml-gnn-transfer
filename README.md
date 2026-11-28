@@ -2,6 +2,9 @@
 
 Does pre-training a graph neural network on synthetic AML data reduce how many labelled laundering cases a bank needs?
 
+![Architecture](docs/architecture.png)
+[Open the interactive diagram](https://coachuttam.github.io/aml-gnn-transfer/architecture.html)
+
 **Status: all planned phases done: pilot, B, A, C (GIN, two seeds), D (PNA, one seed) and E (LightGBM simple baseline).** The answer to RQ2 is in [Final results](#final-results), with one to two seeds per point.
 
 Docs: [PRD](PRD.md) · [Architecture](ARCHITECTURE.md) · [Design system](DESIGN_SYSTEM.md) · [Agent instructions](AGENTS.md)

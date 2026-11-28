@@ -17,3 +17,6 @@ models/
 
 Claude outputs/
 *.patch
+
+# Archify scratch folders and receipts
+.archify/
